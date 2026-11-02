@@ -145,15 +145,9 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
 
   static String _urls(ScreenConfig c) => c.screens.map((s) => s.url).join('\n');
 
-  /// the first web page among the screens (where a tap on the clock goes), the current one where there is none
-  int _firstPage(ScreenConfig c) {
-    // never the old web wall panel: the HomeView replaces it (an integration set up before still lists it)
-    final i = c.screens.indexWhere((s) => !s.url.startsWith('hassmic:') && !s.url.contains('/hassmic/wall.html'));
-    return i < 0 ? current : i;
-  }
-
-  /// the screen shown is one this app draws (hassmic:clock), not a page
-  bool ownScreen(ScreenConfig c) => current >= 0 && current < c.screens.length && c.screens[current].url == 'hassmic:clock';
+  /// a screen offered here: the HomeView replaces the template's clock (hassmic:clock; its lock screen is the clock
+  /// here) and the old web wall panel (hassmic's wall.html), which an integration set up before may still list
+  static bool _offered(Screen s) => !s.url.startsWith('hassmic:') && !s.url.contains('/hassmic/wall.html');
 
   // ---------------------------------------------------------------- the WebView
 
@@ -205,14 +199,9 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     if (c == null || w == null || i < 0 || i >= c.screens.length) return;
     setState(() { current = i; bar = false; typing = false; });
     touched = DateTime.now();
-    var url = c.screens[i].url;
-    if (url.startsWith('hassmic:')) {           // drawn here (build); the page a tap fades into loads under it meanwhile
-      final f = _firstPage(c);
-      if (f < 0 || f == i || c.screens[f].url == loaded) return;
-      url = c.screens[f].url;
-    } else if (url == loaded) {
-      return;                                   // there already (it loaded under the clock)
-    }
+    final url = c.screens[i].url;
+    if (!_offered(c.screens[i])) { _home(); return; }   // the clock, the old wall: the HomeView instead
+    if (url == loaded) return;                  // there already
     _load(c, w, url);
   }
 
@@ -248,29 +237,21 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     } else {
       body = Column(children: [
         Expanded(child: Stack(children: [
-          // a screen of hassmic's this app draws, else the page; the WebView stays (its page kept) under the clock
+          // the page; the WebView stays (its page kept) under the HomeView
           WebViewWidget(controller: w),
-          // the clock fades in over the page (back after idle) and out into it (a tap: the first web screen)
-          Positioned.fill(child: IgnorePointer(ignoring: !ownScreen(c), child: AnimatedOpacity(
-            opacity: ownScreen(c) ? 1 : 0, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut,
-            // a tap: Home (the template goes to the first web screen; here the HomeView is the home)
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: layout != null ? _home : () => _show(_firstPage(c)),
-                child: ClockScreen(s: echo, round: round)),
-          ))),
           // the HomeView, the same way: faded out into a web screen (its tile), back in after idle
           if (layout != null)
             Positioned.fill(child: IgnorePointer(ignoring: current != home, child: AnimatedOpacity(
               opacity: current == home ? 1 : 0, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut,
-              // the old web wall panel (hassmic's wall.html) is what the HomeView replaces: not offered beside it
               child: HomeView(ha: ha, layout: layout!, h24: echo.h24,
-                  screens: [for (final s in c.screens) if (!s.url.contains('/hassmic/wall.html')) s.name],
-                  onScreen: (i) => _show(c.screens.indexWhere((s) => s.name == [for (final s in c.screens) if (!s.url.contains('/hassmic/wall.html')) s.name][i])),
+                  screens: [for (final s in c.screens) if (_offered(s)) s.name],
+                  onScreen: (i) => _show(c.screens.indexOf([for (final s in c.screens) if (_offered(s)) s][i])),
                   settings: c.settings, nextAlarm: echo.nextAlarmText, round: round, echo: echo),
             ))),
           _handle(),
           if (bar) _switcher(c),
         ])),
-        if (typing && ownKeyboard && !ownScreen(c) && current != home)
+        if (typing && ownKeyboard && current != home)
           Keyboard(
             round: round,
             numbers: numbers,
@@ -330,7 +311,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
             Padding(padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: _pill('Home', current == home ? 0x55ffffff : 0x33ffffff, _home)),
             for (var i = 0; i < c.screens.length; i++)
-              if (!c.screens[i].url.contains('/hassmic/wall.html')) Padding(
+              if (_offered(c.screens[i])) Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: _pill(c.screens[i].name, i == current ? 0x55ffffff : 0x33ffffff, () => _show(i)),
               ),

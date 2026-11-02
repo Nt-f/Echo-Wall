@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../ha.dart';
@@ -179,6 +180,13 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         && e.value.attr['media_title'] != null && !lay.hidden.contains(e.key)).map((e) => e.key).firstOrNull;
     if (playing != null && !fav.contains(playing)) home.add(Item(Kind.playing, id: playing));
     for (var i = 0; i < widget.screens.length; i++) { home.add(Item(Kind.screen, screen: i, name: widget.screens[i])); }
+    final ho = lay.homeOrder;
+    if (ho.isNotEmpty) {                        // as moved (List.sort is not stable: ties keep their index)
+      final idx = {for (var i = 0; i < home.length; i++) home[i].key: i};
+      int at(Item it) { final i = ho.indexOf(it.key); return i < 0 ? (1 << 20) + idx[it.key]! : i; }
+      home.sort((a, b) => at(a).compareTo(at(b)));
+    }
+    _keysOf[_gk(null)] = [for (final it in home) it.key];
     out.addAll(pack('Home', '', null, _live(null, home), cols, rows));
 
     final byArea = <String, List<String>>{};
@@ -197,6 +205,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         final k = kind(a).compareTo(kind(b));
         return k != 0 ? k : nameIn(ha, a, name).compareTo(nameIn(ha, b, name));
       });
+      _keysOf[_gk(area)] = ids;
       out.addAll(pack(name, roomSummary(ha, area), area, _live(area, ids.map((id) => itemOf(id)).toList()), cols, rows));
     }
     return out;
@@ -205,7 +214,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   /// while a widget is dragged across this page: the order the drag has made so far
   String? liveArea;
   List<Item> _live(String? area, List<Item> items) {
-    if (liveOrder == null || liveArea != (area ?? '')) return items;
+    if (liveOrder == null || liveArea != _gk(area)) return items;
     final by = {for (final it in items) it.key: it};
     return [for (final k in liveOrder!) ?by[k], ...items.where((it) => !liveOrder!.contains(it.key))];
   }
@@ -250,7 +259,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 padding: EdgeInsets.fromLTRB(pad, pad + (editing ? 44 : 0), pad, bottom),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   SizedBox(height: header, child: _header(ps[i], p, small)),
-                  Expanded(child: Stack(children: [
+                  Expanded(child: _grid(ps[i], [
+                  for (final (it, c, r) in ps[i].placed)
+                    (it.key, Rect.fromLTWH(c * (cw + gap), r * (cell + gap), it.w * cw + (it.w - 1) * gap, it.h * cell + (it.h - 1) * gap)),
+                  ], Stack(children: [
                   for (final (it, c, r) in ps[i].placed)
                     AnimatedPositioned(
                       key: ValueKey('${ps[i].area}/${it.key}'),
@@ -259,7 +271,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                       width: it.w * cw + (it.w - 1) * gap, height: it.h * cell + (it.h - 1) * gap,
                       child: _editable(ps[i], it, p, cell, _widget(it, p, cell)),
                     ),
-                  ])),
+                  ]))),
                 ]),
               ),
             ),
@@ -355,25 +367,24 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               decoration: BoxDecoration(color: bg, shape: BoxShape.circle, boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 6)]),
               child: Text(s, style: TextStyle(color: fg, fontSize: 18, fontWeight: FontWeight.w700, height: 1)))),
         );
-    final key = it.key, area = page.area ?? '';
-    final draggable = Draggable<String>(
+    final key = it.key;
+    final draggable = LayoutBuilder(builder: (context, box) => Draggable<String>(
       data: key,
-      feedback: SizedBox(width: (it.w * cell).toDouble(), height: (it.h * cell).toDouble(),
-          child: Transform.scale(scale: 1.05, child: Opacity(opacity: .9, child: Material(color: Colors.transparent, child: w)))),
+      // the finger at the tile's middle, the tile at its own size, lifted
+      dragAnchorStrategy: (d, context, position) => Offset(box.maxWidth / 2, box.maxHeight / 2),
+      feedback: SizedBox(width: box.maxWidth, height: box.maxHeight,
+          child: Transform.scale(scale: 1.06, child: Opacity(opacity: .92, child: Material(color: Colors.transparent, child: w)))),
       childWhenDragging: Opacity(opacity: .25, child: body),
-      onDragStarted: () => setState(() { dragging = key; liveArea = area; liveOrder = page.placed.map((e) => e.$1.key).toList(); }),
+      onDragStarted: () {
+        HapticFeedback.selectionClick();
+        _dragHalf[key] = Offset(box.maxWidth / 2, box.maxHeight / 2);
+        setState(() { dragging = key; liveArea = _gk(page.area); _lastHit = null; liveOrder = _keys(page.area); });
+      },
       onDragEnd: (_) => _drop(page),
       child: body,
-    );
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (d) {
-        final o = liveOrder;
-        if (o == null || d.data == key || liveArea != area) return false;
-        // the dragged one takes this one's place; this one and those after it move on
-        setState(() { o.remove(d.data); final at = o.indexOf(key); o.insert(at < 0 ? o.length : at, d.data); });
-        return true;
-      },
-      builder: (_, _, _) => Stack(clipBehavior: Clip.none, children: [
+    ));
+    return Builder(
+      builder: (_) => Stack(clipBehavior: Clip.none, children: [
         Positioned.fill(child: draggable),
         if (id != null && !onHome) badge('★', Colors.white, fav.contains(id) ? const Color(0xfff5a623) : const Color(0xffb8b8b8), () {
           lay.favorites = fav.contains(id) ? (fav..remove(id)) : [...fav, id];
@@ -391,14 +402,50 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     );
   }
 
+  /// a page's widgets as a drop target: the one under the finger (well inside it, not near its edge) gives its place
+  /// to the dragged one.  One target per page, not per widget: a widget that moves away under the finger and another
+  /// that moves in made a per-widget target swap the two back and forth; and a big widget dropped among small ones
+  /// moves them, so a swap waits until the finger has left the widget it was made on (_lastHit)
+  String? _lastHit;
+  Widget _grid(PageSpec page, List<(String, Rect)> slots, Widget child) {
+    final area = _gk(page.area);
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) => liveOrder != null && liveArea == area && slots.any((s) => s.$1 == d.data),
+      onMove: (d) {
+        final o = liveOrder, grid = _gridBox[area];
+        if (o == null || liveArea != area || grid == null || !grid.attached) return;
+        final at = grid.globalToLocal(d.offset + (_dragHalf[d.data] ?? Offset.zero));
+        final hit = slots.where((s) => s.$1 != d.data && s.$2.deflate(min(s.$2.width, s.$2.height) * .22).contains(at)).firstOrNull;
+        if (hit == null) {
+          if (_lastHit != null && !slots.any((s) => s.$1 == _lastHit && s.$2.contains(at))) _lastHit = null;
+          return;
+        }
+        if (hit.$1 == _lastHit) return;
+        _lastHit = hit.$1;
+        setState(() { o.remove(d.data); final i = o.indexOf(hit.$1); o.insert(i < 0 ? o.length : i, d.data); });
+      },
+      builder: (context, _, _) => _GridBox(onBox: (b) => _gridBox[area] = b, child: child),
+    );
+  }
+  final _gridBox = <String, RenderBox>{};
+  // each page group's widgets in order (all its pages), the last pages() made: '' Home, '\0<area>' a room
+  final _keysOf = <String, List<String>>{};
+  List<String> _keys(String? area) => [...?_keysOf[_gk(area)]];
+  /// a page group's key: Home's is not the room without an area's ('')
+  static String _gk(String? area) => area == null ? '' : '\u0000$area';
+  final _dragHalf = <String, Offset>{};
+
   void _drop(PageSpec page) {
     final o = liveOrder;
-    setState(() { dragging = null; liveOrder = null; liveArea = null; });
+    setState(() { dragging = null; liveOrder = null; liveArea = null; _lastHit = null; });
     if (o == null) return;
-    final ids = o.where((k) => ha.states.containsKey(k)).toList();
     if (page.area == null) {
-      lay.favorites = [...ids, ...favorites().where((x) => !ids.contains(x))];
+      // Home: every widget's place (the clocks, the date, the screens too), the devices on it in that order
+      lay.homeOrder = o;
+      final fav = favorites();
+      lay.favorites = [...lay.homeOrder.where(fav.contains), ...fav.where((x) => !lay.homeOrder.contains(x))];
     } else {
+      final ids = o.where((k) => ha.states.containsKey(k)).toList();
       lay.order = {...lay.order, page.area!: ids};
     }
     lay.changed();
@@ -472,4 +519,14 @@ class _TickerBuilderState extends State<TickerBuilder> {
   void dispose() { _t?.cancel(); super.dispose(); }
   @override
   Widget build(BuildContext context) => widget.builder(DateTime.now());
+}
+
+/// hands its render box to the page's drop target (where the finger is, in the grid's own coordinates)
+class _GridBox extends SingleChildRenderObjectWidget {
+  final void Function(RenderBox) onBox;
+  const _GridBox({required this.onBox, super.child});
+  @override
+  RenderProxyBox createRenderObject(BuildContext context) { final b = RenderProxyBox(); onBox(b); return b; }
+  @override
+  void updateRenderObject(BuildContext context, RenderProxyBox b) => onBox(b);
 }

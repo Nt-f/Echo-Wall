@@ -14,6 +14,7 @@ class Layout extends ChangeNotifier {
   List<String>? favorites;                      // null: the HomeView picks (a thermostat, a camera, scenes, locks)
   Set<String> hidden = {};
   Map<String, List<String>> order = {};        // area id: its tiles first in this order
+  List<String> homeOrder = [];                  // Home's widgets by key (clocks, date, screens, devices), as moved
   int ambientSeconds = 120;                     // 0: never
   bool analogClock = true, digitalClock = true;
   File? _file;
@@ -33,12 +34,13 @@ class Layout extends ChangeNotifier {
     favorites = (j['favorites'] as List?)?.cast<String>();
     hidden = {...(j['hidden'] as List? ?? const []).cast<String>()};
     order = {for (final e in (j['order'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as List).cast<String>()};
+    homeOrder = (j['home_order'] as List? ?? const []).cast<String>();
     ambientSeconds = (j['ambient'] as num? ?? 120).toInt();
     analogClock = j['analog_clock'] != false;
     digitalClock = j['digital_clock'] != false;
   }
 
-  Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order,
+  Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order, 'home_order': homeOrder,
       'ambient': ambientSeconds, 'analog_clock': analogClock, 'digital_clock': digitalClock};
 
   void changed() {
@@ -48,7 +50,7 @@ class Layout extends ChangeNotifier {
   }
 
   void reset() {
-    favorites = null; hidden = {}; order = {};
+    favorites = null; hidden = {}; order = {}; homeOrder = [];
     changed();
   }
 }
