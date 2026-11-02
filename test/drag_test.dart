@@ -91,4 +91,19 @@ void main() {
     await g.up();
     await t.pump(const Duration(milliseconds: 600));
   });
+
+  testWidgets('no glass kept in a cached layer of its page (it would show the blur of where it was painted)', (t) async {
+    await home(t);
+    final glass = find.descendant(of: find.byType(PageView), matching: find.byType(Frosted));
+    expect(glass, findsWidgets);
+    for (final e in glass.evaluate()) {
+      var cached = false;
+      e.visitAncestorElements((a) {
+        if (a.widget is PageView) return false;
+        if (a.widget is RepaintBoundary) { cached = true; return false; }
+        return true;
+      });
+      expect(cached, isFalse, reason: 'a RepaintBoundary between a widget\'s glass and the pages');
+    }
+  });
 }

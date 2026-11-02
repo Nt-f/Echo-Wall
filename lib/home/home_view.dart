@@ -292,12 +292,15 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           final ps = pages(cols, rows);
           if (page >= ps.length) page = ps.length - 1;
           return Stack(children: [
-            PageView.builder(
+            // no repaint boundary per page (PageView.builder adds one): the glass draws its piece of the blurred
+            // wallpaper from where it is on the screen when painted, and a page kept as a layer from a paint off to the
+            // side (or half swiped in) slid in later with that piece: clear glass, no blur.  Without them each frame
+            // of a swipe paints the page again, the glass at its true place (drawing the glass is copying a picture)
+            PageView.custom(
               controller: pc,
               physics: editing ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(parent: PageScrollPhysics()),
-              itemCount: ps.length,
               onPageChanged: (i) => setState(() => page = i),
-              itemBuilder: (context, i) => _grid(ps, i, cols, rows, cw + gap, cell + gap, Padding(
+              childrenDelegate: SliverChildBuilderDelegate(childCount: ps.length, addRepaintBoundaries: false, (context, i) => _grid(ps, i, cols, rows, cw + gap, cell + gap, Padding(
                 padding: EdgeInsets.fromLTRB(pad, pad + (editing ? 44 : 0), pad, bottom),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   SizedBox(height: header, child: _header(ps[i], p, small)),
@@ -312,7 +315,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                     ),
                   ]))),
                 ]),
-              )),
+              ))),
             ),
             if (ps.isNotEmpty) _dots(ps, p),
             if (editing) _bar(ps, p),
