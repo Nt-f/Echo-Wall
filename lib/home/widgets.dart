@@ -1,22 +1,32 @@
 // The HomeView's widgets: square glass over the wallpaper, in the manner of Apple's HomeView.  Sizes are fractions of
 // the cell (`u`: a hundredth of a cell's side), so a tile reads the same on a Show 5's 139 px cells and a Show 15's.
-// No live blur: translucent white over a wallpaper drawn once (a Mali-T720 drops to 25-43 fps under a full blur).
+// The glass is Apple's material: the wallpaper behind it blurred once and drawn piece by piece (backdrop.dart).
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../echo_ui.dart' show Ticker, clockText, ampm;
 import '../ha.dart';
+import 'backdrop.dart';
 import 'layout.dart';
 import 'model.dart';
+import 'press.dart';
 
 class Palette {
   final Gradient wall;
   final Color glass, edge, glassOn, text, dim, textOn, dimOn, sheet, accentDay;
-  const Palette(this.wall, this.glass, this.edge, this.glassOn, this.text, this.dim, this.textOn, this.dimOn, this.sheet, this.accentDay);
+  final Color sheetText;                        // on the detail's card (a thick, dark material)
+  const Palette(this.wall, this.glass, this.edge, this.glassOn, this.text, this.dim, this.textOn, this.dimOn, this.sheet, this.accentDay,
+      [this.sheetText = Colors.white]);
 
   static Palette of(Wallpaper w) => switch (w) {
+        // a photo behind the glass: Apple's Home on a wallpaper; the tint thin, the text white
+        Wallpaper.photo => const Palette(
+            LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xff2c3e50), Color(0xff4a6274)]),
+            Color(0x1fffffff), Color(0x40ffffff), Color(0xebffffff), Colors.white, Color(0xbfffffff), Color(0xff1c1c1e),
+            Color(0x8c1c1c1e), Color(0x99141416), Color(0xffffd60a)),
         Wallpaper.amber => const Palette(
             LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
                 colors: [Color(0xffb8601c), Color(0xffd98a33), Color(0xffe9a74b), Color(0xffc46f22)], stops: [0, .45, .7, 1]),
@@ -33,19 +43,50 @@ class Palette {
       };
 }
 
-/// the wallpaper with two soft lights, once
+/// the wallpaper: the palette's gradient and soft, out-of-focus shapes of light over it (as Apple's wallpapers have
+/// them), painted once and kept (RepaintBoundary): nothing of it moves
+class WallpaperPainter extends CustomPainter {
+  final Palette p;
+  WallpaperPainter(this.p);
+  @override
+  void paint(Canvas canvas, Size s) => _Wall(p).paint(canvas, s);
+  @override
+  bool shouldRepaint(WallpaperPainter old) => old.p != p;
+}
+
 class WallpaperView extends StatelessWidget {
   final Palette p;
   const WallpaperView(this.p, {super.key});
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(gradient: p.wall),
-        child: const DecoratedBox(decoration: BoxDecoration(gradient: RadialGradient(center: Alignment(.5, -.3), radius: .9,
-            colors: [Color(0x40ffe0a0), Color(0x00ffe0a0)]))),
-      );
+  Widget build(BuildContext context) => RepaintBoundary(child: CustomPaint(painter: _Wall(p), size: Size.infinite));
 }
 
-/// a glass card; `on` lights it
+class _Wall extends CustomPainter {
+  final Palette p;
+  _Wall(this.p);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final r = Offset.zero & s;
+    canvas.drawRect(r, Paint()..shader = p.wall.createShader(r));
+    final light = p.text == Colors.white;
+    // big soft discs, light and shade, as out-of-focus shapes behind glass
+    for (final (x, y, rad, c) in [
+      (.18, .12, .55, light ? const Color(0x38fff4dc) : const Color(0x40ffffff)),
+      (.82, .28, .45, light ? const Color(0x2effe0a0) : const Color(0x30d9d2f7)),
+      (.62, 1.05, .6, const Color(0x26000000)),
+      (.05, .95, .4, light ? const Color(0x1fffffff) : const Color(0x24c8c0ff)),
+    ]) {
+      final o = Offset(s.width * x, s.height * y), radius = s.longestSide * rad;
+      canvas.drawCircle(o, radius, Paint()..shader = RadialGradient(colors: [c, c.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: o, radius: radius)));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Wall old) => old.p != p;
+}
+
+/// glass: Apple's thin material over the wallpaper (its blurred piece, lifted colour, a light tint), continuous
+/// corners, a light top edge, a soft shadow; `on` lights it near-white, as Apple's Home lights an accessory that is on
 class Glass extends StatelessWidget {
   final Palette p;
   final bool on, big;
@@ -54,21 +95,49 @@ class Glass extends StatelessWidget {
   final EdgeInsets? padding;
   const Glass({super.key, required this.p, required this.cell, required this.child, this.on = false, this.big = false, this.padding});
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-        padding: padding,
-        decoration: BoxDecoration(
-          color: on ? p.glassOn : p.glass,
-          borderRadius: BorderRadius.circular(cell * (big ? .2 : .19)),
-          border: Border.all(color: p.edge, width: 1),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: child,
-      );
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(min(30, cell * .17));
+    final b = BackdropScope.of(context);
+    return DecoratedBox(
+      decoration: ShapeDecoration(shape: RoundedSuperellipseBorder(borderRadius: radius),
+          shadows: const [BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(0, 10))]),
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: on ? p.glassOn : p.glass), duration: const Duration(milliseconds: 260), curve: Curves.easeOut,
+        builder: (context, tint, child) => Frosted(blurred: b?.blurred, screen: b?.size ?? Size.zero, radius: radius, tint: tint ?? p.glass,
+            edgeTop: on ? const Color(0xb3ffffff) : p.edge.withValues(alpha: min(1, p.edge.a * 1.7)), edgeBottom: p.edge.withValues(alpha: p.edge.a * .3),
+            child: child),
+        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+      ),
+    );
+  }
 }
 
-/// an accessory: the icon on top, its name bold, its room or its state under it
+/// a 1 px border lighter at the top than at the bottom
+class GradientBoxBorder extends BoxBorder {
+  final Color upper, lower;
+  const GradientBoxBorder(this.upper, this.lower);
+  @override
+  BorderSide get top => BorderSide.none;
+  @override
+  BorderSide get bottom => BorderSide.none;
+  @override
+  bool get isUniform => true;
+  @override
+  EdgeInsetsGeometry get dimensions => const EdgeInsets.all(1);
+  @override
+  ShapeBorder scale(double t) => this;
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection, BoxShape shape = BoxShape.rectangle, BorderRadius? borderRadius}) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [upper, lower]).createShader(rect);
+    canvas.drawRRect((borderRadius ?? BorderRadius.zero).toRRect(rect).deflate(.5), paint);
+  }
+}
+
+/// an accessory, laid out as Home Assistant's tile card has it: its icon in a round badge (lit in its state's colour)
+/// at the top, its name and its state at the bottom, left-aligned
 class AccessoryTile extends StatelessWidget {
   final Ha ha;
   final Palette p;
@@ -82,27 +151,30 @@ class AccessoryTile extends StatelessWidget {
     final l = look(ha, id), u = cell / 100;
     final fg = l.on ? p.textOn : p.text, dim = l.on ? p.dimOn : p.dim;
     final name = nameIn(ha, id, room ?? ha.areaName(ha.areaOf(id)));
-    return GestureDetector(
+    final badge = 26 * u;
+    return Press(
       onTap: () { if (!tap(ha, id)) onLong(); },
       onLongPress: onLong,
       child: Opacity(
         opacity: l.unavailable ? .5 : 1,
-        child: Glass(p: p, cell: cell, on: l.on, child: Stack(children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6 * u),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              AnimatedScale(scale: l.on ? 1.08 : 1, duration: const Duration(milliseconds: 220),
-                  child: Icon(l.icon, size: 25 * u, color: l.on ? l.color : fg)),
-              SizedBox(height: 7 * u),
-              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: max(11, 10.5 * u))),
-              Text(room != null && !l.unavailable ? room! : l.text, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: dim, fontSize: max(10, 9.2 * u))),
-            ]),
-          ),
-          if (l.level != null)
-            Positioned(left: 16 * u, right: 16 * u, bottom: 7 * u, child: ClipRRect(borderRadius: BorderRadius.circular(2), child:
-                LinearProgressIndicator(value: l.level, minHeight: 3, backgroundColor: const Color(0x14000000), color: l.color))),
-        ])),
+        child: Hero(tag: 'tile/$id', child: Glass(p: p, cell: cell, on: l.on, padding: EdgeInsets.all(10 * u), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              width: badge, height: badge,
+              decoration: BoxDecoration(shape: BoxShape.circle,
+                  color: l.on ? l.color.withValues(alpha: .2) : (p.text == Colors.white ? const Color(0x24ffffff) : const Color(0x14000000))),
+              child: Icon(l.icon, size: badge * .56, color: l.on ? l.color : fg),
+            ),
+            const Spacer(),
+            Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: max(12.0, 9 * u), height: 1.15)),
+            SizedBox(height: 1.5 * u),
+            Text(room != null && !l.unavailable ? room! : l.text, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: dim, fontSize: max(11.0, 7.8 * u), fontWeight: FontWeight.w500)),
+          ],
+        ))),
       ),
     );
   }
@@ -145,9 +217,9 @@ class _ThermostatCardState extends State<ThermostatCard> {
     final parts = txt.split('.');
     final room = widget.ha.areaName(widget.ha.areaOf(widget.id));
     final cur = st?.numAttr('current_temperature');
-    return GestureDetector(
-      onTap: widget.onLong, onLongPress: widget.onLong,
-      child: Glass(p: p, cell: widget.cell, big: true, child: Stack(children: [
+    return Press(
+      onTap: widget.onLong, onLongPress: widget.onLong, depth: .025,
+      child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: Stack(children: [
         Center(child: Padding(padding: EdgeInsets.only(bottom: 12 * u), child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(parts[0], style: TextStyle(color: p.text, fontSize: 44 * u, height: 1, fontWeight: FontWeight.w400, letterSpacing: -1.5 * u)),
@@ -158,9 +230,12 @@ class _ThermostatCardState extends State<ThermostatCard> {
           Text([room, if (cur != null) '$cur°', if (st?.state == 'off') 'Off'].where((s) => s.isNotEmpty).join(' • '),
               style: TextStyle(color: p.dim, fontSize: max(10, 4.8 * u))),
         ]))),
-        Positioned(left: 2 * u, bottom: 2 * u, child: IconButton(iconSize: 13 * u, color: p.text, onPressed: () => nudge(-1), icon: const Icon(Icons.expand_more))),
-        Positioned(right: 2 * u, bottom: 2 * u, child: IconButton(iconSize: 13 * u, color: p.text, onPressed: () => nudge(1), icon: const Icon(Icons.expand_less))),
-      ])),
+        // the chevrons, as on Apple's thermostat card: no ripple, a press that gives
+        Positioned(left: 4 * u, bottom: 4 * u, child: Press(onTap: () => nudge(-1), depth: .12,
+            child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(CupertinoIcons.chevron_down, size: 11 * u, color: p.text)))),
+        Positioned(right: 4 * u, bottom: 4 * u, child: Press(onTap: () => nudge(1), depth: .12,
+            child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(CupertinoIcons.chevron_up, size: 11 * u, color: p.text)))),
+      ]))),
     );
   }
 }
@@ -338,7 +413,7 @@ class _CameraCardState extends State<CameraCard> {
   }
 }
 
-/// another screen of the app (Home Assistant's own UI, Music Assistant): a tile that goes there
+/// another screen of the app (Home Assistant's own UI, Music Assistant): a tile that goes there, as the accessories'
 class ScreenTile extends StatelessWidget {
   final Palette p;
   final String name;
@@ -347,14 +422,22 @@ class ScreenTile extends StatelessWidget {
   const ScreenTile({super.key, required this.p, required this.name, required this.cell, required this.onTap});
   @override
   Widget build(BuildContext context) {
-    final u = cell / 100;
+    final u = cell / 100, badge = 26 * u;
     final icon = RegExp('music', caseSensitive: false).hasMatch(name) ? Icons.music_note
+        : RegExp('clock', caseSensitive: false).hasMatch(name) ? Icons.schedule
         : RegExp('assistant|home', caseSensitive: false).hasMatch(name) ? Icons.home : Icons.web;
-    return GestureDetector(onTap: onTap, child: Glass(p: p, cell: cell, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, size: 25 * u, color: p.text),
-      SizedBox(height: 7 * u),
-      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(11, 10.5 * u))),
-      Text('Open', style: TextStyle(color: p.dim, fontSize: max(10, 9.2 * u))),
+    return GestureDetector(onTap: onTap, child: Glass(p: p, cell: cell, padding: EdgeInsets.all(10 * u), child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(width: badge, height: badge,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: p.text == Colors.white ? const Color(0x24ffffff) : const Color(0x14000000)),
+          child: Icon(icon, size: badge * .56, color: p.text)),
+      const Spacer(),
+      Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w600, fontSize: max(12.0, 9 * u))),
+      SizedBox(height: 1.5 * u),
+      Row(children: [
+        Text('Open', style: TextStyle(color: p.dim, fontSize: max(11.0, 7.8 * u), fontWeight: FontWeight.w500)),
+        Icon(Icons.chevron_right, size: max(12.0, 8 * u), color: p.dim),
+      ]),
     ])));
   }
 }

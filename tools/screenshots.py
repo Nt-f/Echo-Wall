@@ -251,26 +251,33 @@ def main():
             time.sleep(14)                      # the HomeView: Home Assistant's websocket, no web page
             shot(os.path.join(out, f"{mid}-home.png"), round_)
             d = dpi / 160
-            adb("shell", "input", "swipe", str(int(w * .8)), str(h // 2), str(int(w * .15)), str(h // 2), "250")     # the next page: a room
-            time.sleep(2)
+            # past Home's pages to a room: the demo's Home takes about 20 cells (the clocks, the date, a thermostat, a
+            # camera, locks, what plays, the screens), a page rows x cols of them (as home_view.dart lays them out)
+            ins = .146 * min(w, h) if round_ else 0
+            iw, ih = (w - 2 * ins) / d, (h - 2 * ins) / d
+            rows = 3 if ih < 600 else 4 if ih < 900 else 5
+            cell = (ih - 12 - 22 - 10 * (rows - 1)) / rows
+            cols = max(2, int((iw - 24 + 10) // (cell + 10)))
+            for _ in range(-(-20 // (rows * cols))):
+                adb("shell", "input", "swipe", str(int(w * .8)), str(h // 2), str(int(w * .15)), str(h // 2), "250")
+                time.sleep(1.5)
             shot(os.path.join(out, f"{mid}-room.png"), round_)
-            # the first widget's controls: a long press at the first cell
-            rows = 3 if h / d < 600 else 4 if h / d < 900 else 5
-            cell = (h / d - 12 - 22 - 10 * (rows - 1)) / rows
-            adb("shell", "input", "swipe", str(int((12 + cell / 2) * d)), str(int((12 + cell / 2) * d)),
-                str(int((12 + cell / 2) * d)), str(int((12 + cell / 2) * d)), "800")
+            # the first widget's controls: a long press at the first cell (a round screen: inside its square)
+            fx = fy = int(ins + (12 + cell / 2) * d)
+            adb("shell", "input", "swipe", str(fx), str(fy), str(fx), str(fy), "800")
             time.sleep(2)
             shot(os.path.join(out, f"{mid}-controls.png"), round_)
             adb("shell", "input", "keyevent", "BACK"); time.sleep(1)
-            adb("shell", "input", "swipe", str(w // 2), str(int(h - 11 * d)), str(w // 2), str(int(h - 11 * d)), "900")   # hold the dots
+            dy = str(int(h - ins - 11 * d))
+            adb("shell", "input", "swipe", str(w // 2), dy, str(w // 2), dy, "900")   # hold the dots
             time.sleep(2)
             shot(os.path.join(out, f"{mid}-edit.png"), round_)
-            adb("shell", "input", "swipe", str(w // 2), str(int(h - 11 * d)), str(w // 2), str(int(h - 11 * d)), "900")   # and again: done
+            adb("shell", "input", "swipe", str(w // 2), dy, str(w // 2), dy, "900")   # and again: done
             adb("shell", "setprop", "debug.hassmic.ambient", "6")
             adb("shell", "am", "force-stop", PKG)
             adb("shell", "am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
-            time.sleep(22)
-            shot(os.path.join(out, f"{mid}-ambient.png"), round_)
+            time.sleep(24)
+            shot(os.path.join(out, f"{mid}-lock.png"), round_)       # the lock screen: a photo, the clock where it has room
             adb("shell", "setprop", "debug.hassmic.ambient", "0")
     except Exception:
         print(open(os.path.join(tmp, "ha.log"), errors="replace").read()[-3000:], file=sys.stderr)

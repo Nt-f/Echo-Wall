@@ -7,10 +7,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-enum Wallpaper { amber, dusk, light }
+enum Wallpaper { photo, amber, dusk, light }
 
 class Layout extends ChangeNotifier {
-  Wallpaper wallpaper = Wallpaper.amber;
+  Wallpaper wallpaper = Wallpaper.photo;
   List<String>? favorites;                      // null: the HomeView picks (a thermostat, a camera, scenes, locks)
   Set<String> hidden = {};
   Map<String, List<String>> order = {};        // area id: its tiles first in this order
@@ -29,7 +29,7 @@ class Layout extends ChangeNotifier {
   }
 
   void _read(Map<String, dynamic> j) {
-    wallpaper = Wallpaper.values.firstWhere((w) => w.name == j['wallpaper'], orElse: () => Wallpaper.amber);
+    wallpaper = Wallpaper.values.firstWhere((w) => w.name == j['wallpaper'], orElse: () => Wallpaper.photo);
     favorites = (j['favorites'] as List?)?.cast<String>();
     hidden = {...(j['hidden'] as List? ?? const []).cast<String>()};
     order = {for (final e in (j['order'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as List).cast<String>()};

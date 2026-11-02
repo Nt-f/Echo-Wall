@@ -26,7 +26,11 @@ import 'keyboard.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);   // no system UI on the Echo, none to show
-  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: ScreenApp()));
+  // Inter: the open face nearest Apple's San Francisco; Apple's page transitions and scrolling everywhere
+  runApp(MaterialApp(debugShowCheckedModeBanner: false, home: const ScreenApp(), theme: ThemeData(
+    fontFamily: 'Inter', brightness: Brightness.dark, splashFactory: NoSplash.splashFactory, highlightColor: Colors.transparent,
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {TargetPlatform.android: CupertinoPageTransitionsBuilder()}),
+  )));
 }
 
 class ScreenApp extends StatefulWidget {
@@ -246,7 +250,8 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
           if (layout != null)
             Positioned.fill(child: IgnorePointer(ignoring: current != home, child: AnimatedOpacity(
               opacity: current == home ? 1 : 0, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut,
-              child: HomeView(ha: ha, layout: layout!, h24: echo.h24, screens: [for (final s in c.screens) s.name], onScreen: _show),
+              child: HomeView(ha: ha, layout: layout!, h24: echo.h24, screens: [for (final s in c.screens) s.name], onScreen: _show,
+                  settings: c.settings, nextAlarm: echo.nextAlarmText, round: round),
             ))),
           _handle(),
           if (bar) _switcher(c),
@@ -267,10 +272,11 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
         if (echo.ringing.isNotEmpty) RingOverlay(s: echo, round: round) else if (echo.words) WordsOverlay(s: echo, round: round),
       ]);
     }
-    return Scaffold(
+    // never left by Back (a remote, a keyboard's Escape): the screen app is all there is; its sheets still close by it
+    return PopScope(canPop: false, child: Scaffold(
       backgroundColor: Colors.black,
       body: Listener(onPointerDown: (_) => touched = DateTime.now(), child: body),
-    );
+    ));
   }
 
   Widget _handle() => Align(
