@@ -282,10 +282,12 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           // room to breathe, as Apple's Home has it: few large tiles (4 x 2 on an Echo Show 5), wide gaps, a page title
           final small = box.maxHeight < 360;
           final gap = small ? 10.0 : 14.0, pad = small ? 10.0 : 16.0, bottom = 22.0, header = small ? 34.0 : 52.0;
-          final avail = box.maxHeight - pad - header - bottom - (editing ? 44 : 0);
-          final rows = avail < 430 ? 2 : avail < 720 ? 3 : 4;
+          // the grid's rows and columns from the page as it is when not editing: the edit bar (44 px) only makes the
+          // cells a little lower, so a widget put in the last column is still there after Done
+          final full = box.maxHeight - pad - header - bottom, avail = full - (editing ? 44 : 0);
+          final rows = full < 430 ? 2 : full < 720 ? 3 : 4;
+          final cols = max(2, ((box.maxWidth - 2 * pad + gap) / ((full - gap * (rows - 1)) / rows + gap)).floor());
           final cell = (avail - gap * (rows - 1)) / rows;
-          final cols = max(2, ((box.maxWidth - 2 * pad + gap) / (cell + gap)).floor());
           final cw = (box.maxWidth - 2 * pad - gap * (cols - 1)) / cols;
           final ps = pages(cols, rows);
           if (page >= ps.length) page = ps.length - 1;
@@ -409,8 +411,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       data: key,
       // the finger at the tile's middle, the tile at its own size, lifted
       dragAnchorStrategy: (d, context, position) => Offset(box.maxWidth / 2, box.maxHeight / 2),
-      feedback: SizedBox(width: box.maxWidth, height: box.maxHeight,
-          child: Transform.scale(scale: 1.06, child: Opacity(opacity: .92, child: Material(color: Colors.transparent, child: w)))),
+      // the lifted copy is drawn in the Overlay, outside the HomeView: its glass needs the backdrop handed on
+      feedback: BackdropScope(backdrop: backdrop, child: SizedBox(width: box.maxWidth, height: box.maxHeight,
+          child: Transform.scale(scale: 1.06, child: Opacity(opacity: .92, child: Material(color: Colors.transparent, child: w))))),
       childWhenDragging: Opacity(opacity: .25, child: body),
       onDragStarted: () {
         HapticFeedback.selectionClick();
