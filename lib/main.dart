@@ -82,7 +82,16 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     }).catchError((_) {});
     Layout.load().then((l) { if (mounted) setState(() => layout = l); });
     _schedule(Duration.zero);
-    feed.start((s) { if (mounted) setState(() => echo = s); });      // the words, a ring, the clock's next alarm
+    feed.start((s) {                            // the words, a ring, the clock's next alarm, the screen's mode
+      if (!mounted) return;
+      final keep = s.display == 'always' || s.display == 'always_dim';
+      if (keep != (echo.display == 'always' || echo.display == 'always_dim') || echo.v == 0) {
+        // "always on": the window keeps the screen on too, whatever the screen timeout says (hassmic sets that, but
+        // a tool that sets it after hassmic would put the screen to sleep, and a sleeping panel takes no touch)
+        const MethodChannel('hassmic/keys').invokeMethod('keepOn', keep).catchError((_) => null);
+      }
+      setState(() => echo = s);
+    });
   }
 
   @override
@@ -250,7 +259,10 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
           if (layout != null)
             Positioned.fill(child: IgnorePointer(ignoring: current != home, child: AnimatedOpacity(
               opacity: current == home ? 1 : 0, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut,
-              child: HomeView(ha: ha, layout: layout!, h24: echo.h24, screens: [for (final s in c.screens) s.name], onScreen: _show,
+              // the old web wall panel (hassmic's wall.html) is what the HomeView replaces: not offered beside it
+              child: HomeView(ha: ha, layout: layout!, h24: echo.h24,
+                  screens: [for (final s in c.screens) if (!s.url.contains('/hassmic/wall.html')) s.name],
+                  onScreen: (i) => _show(c.screens.indexWhere((s) => s.name == [for (final s in c.screens) if (!s.url.contains('/hassmic/wall.html')) s.name][i])),
                   settings: c.settings, nextAlarm: echo.nextAlarmText, round: round),
             ))),
           _handle(),
@@ -313,7 +325,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
             Padding(padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: _pill('Home', current == home ? 0x55ffffff : 0x33ffffff, _home)),
             for (var i = 0; i < c.screens.length; i++)
-              Padding(
+              if (!c.screens[i].url.contains('/hassmic/wall.html')) Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: _pill(c.screens[i].name, i == current ? 0x55ffffff : 0x33ffffff, () => _show(i)),
               ),

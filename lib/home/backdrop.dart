@@ -69,11 +69,11 @@ class Backdrop extends ChangeNotifier {
       ..colorFilter = const ColorFilter.matrix(_vibrancy));
     final blurImg = await rec.endRecording().toImage(small.width.ceil(), small.height.ceil());
     if (gen != _gen) { sharpImg.dispose(); blurImg.dispose(); return; }
-    final oldS = sharp, oldB = blurred;
+    // the old ones are not disposed here: a card that has not been built again since (not every glass depends on the
+    // scope: the chips, a route's card) would paint a disposed image, which draws nothing ("the cards' backgrounds do
+    // not always show"); the garbage collector frees them once nothing holds them
     sharp = sharpImg; blurred = blurImg;
     notifyListeners();
-    // the old ones after this frame: a card may still be painting with them
-    WidgetsBinding.instance.addPostFrameCallback((_) { oldS?.dispose(); oldB?.dispose(); });
   }
 }
 
