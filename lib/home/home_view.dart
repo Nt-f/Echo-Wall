@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,6 +16,10 @@ import 'layout.dart';
 import 'lock_screen.dart';
 import 'model.dart';
 import 'photos.dart';
+import 'press.dart';
+import 'sheets.dart';
+import 'voice.dart';
+import '../hassmic.dart' show EchoState;
 import 'widgets.dart';
 
 enum Kind { analog, digital, date, thermo, playing, camera, tile, screen }
@@ -75,9 +80,10 @@ class HomeView extends StatefulWidget {
   final void Function(int) onScreen;
   final Map<String, String> settings;           // the integration's screen app settings (immich.*, photos.minutes)
   final bool round;                             // an Echo Spot: the widgets inside the circle's square
+  final EchoState? echo;                        // hassmic's: a request, a ring (drawn here on the glass)
   final String nextAlarm;
   const HomeView({super.key, required this.ha, required this.layout, required this.h24, required this.screens, required this.onScreen,
-      this.settings = const {}, this.nextAlarm = '', this.round = false});
+      this.settings = const {}, this.nextAlarm = '', this.round = false, this.echo});
   @override
   State<HomeView> createState() => _HomeViewState();
 }
@@ -268,6 +274,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         if (ambient) Positioned.fill(child: LockScreen(photos: photos..configure(widget.settings), ha: ha, h24: widget.h24,
             nextAlarm: widget.nextAlarm, minutes: int.tryParse(widget.settings['photos.minutes'] ?? '') ?? 3, round: widget.round,
             onUnlock: () { touched = DateTime.now(); setState(() => ambient = false); })),
+        // the voice assistant and the alarms, on the glass, over everything (the lock screen too)
+        if (widget.echo != null) Positioned.fill(child: VoiceLayer(s: widget.echo!, backdrop: backdrop, round: widget.round)),
       ]),
     )));
   }
@@ -277,7 +285,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return switch (it.kind) {
       Kind.analog => AnalogClockCard(p: p, cell: cell),
       Kind.digital => DigitalClockCard(p: p, cell: cell, h24: widget.h24, wide: true),
-      Kind.date => DateWeatherCard(ha: ha, p: p, cell: cell),
+      Kind.date => Press(onTap: () => showWeather(context, ha, p, backdrop), child: DateWeatherCard(ha: ha, p: p, cell: cell)),
       Kind.thermo => ThermostatCard(ha: ha, p: p, id: it.id!, cell: cell, onLong: more),
       Kind.playing => NowPlayingCard(ha: ha, p: p, id: it.id!, cell: cell, onLong: more),
       Kind.camera => CameraCard(ha: ha, p: p, id: it.id!, cell: cell),
@@ -286,43 +294,40 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     };
   }
 
-  /// the page's title and its summary as chips (Apple's Home status buttons, Lovelace's badges): Home's the whole
-  /// house's, a room's its temperature, humidity and what is on in it
+  /// the page's title and beside it, as Apple's Home has them, chips of frosted glass: on Home the categories (Lights,
+  /// Climate, Security, Speakers: what each is doing; a tap shows its devices), in a room its temperature, humidity
+  /// and lights
   Widget _header(PageSpec pg, Palette p, bool small) {
-    final chips = <(IconData, String)>[];
-    Iterable<String> inPage(String d) => ha.states.keys.where((x) => domainOf(x) == d && shown(ha, lay, x) && (pg.area == null || (ha.areaOf(x) ?? '') == pg.area));
-    final lights = inPage('light').where((x) => ha.states[x]!.state == 'on').length;
+    final chips = <(IconData, String, VoidCallback?)>[];
     if (pg.area == null) {
-      final t = ha.states.entries.where((e) => domainOf(e.key) == 'climate' && e.value.numAttr('current_temperature') != null).map((e) => e.value).firstOrNull;
-      if (t != null) chips.add((Icons.thermostat, '${t.numAttr('current_temperature')}°'));
-      if (lights > 0) chips.add((Icons.lightbulb, lights == 1 ? '1 light on' : '$lights lights on'));
-      final open = inPage('lock').where((x) => ha.states[x]!.state == 'unlocked').length;
-      if (open > 0) chips.add((Icons.lock_open, open == 1 ? '1 unlocked' : '$open unlocked'));
-      final playing = inPage('media_player').where((x) => ha.states[x]!.state == 'playing').length;
-      if (playing > 0) chips.add((Icons.music_note, '$playing playing'));
-    } else {
-      final sum = roomSummary(ha, pg.area!);
-      for (final part in sum.split(' · ').where((x) => x.isNotEmpty)) {
-        chips.add((part.endsWith('%') ? Icons.water_drop : Icons.thermostat, part));
+      for (final c in Category.values) {
+        final sum = categorySummary(ha, lay, c);
+        if (sum != null) chips.add((categoryIcon[c]!, '${categoryName[c]}  $sum', () => showCategory(context, ha, lay, p, backdrop, c)));
       }
-      if (lights > 0) chips.add((Icons.lightbulb, lights == 1 ? '1 light on' : '$lights lights on'));
+    } else {
+      for (final part in roomSummary(ha, pg.area!).split(' · ').where((x) => x.isNotEmpty)) {
+        chips.add((part.endsWith('%') ? CupertinoIcons.drop_fill : CupertinoIcons.thermometer, part, null));
+      }
+      final lights = categorySummary(ha, lay, Category.lights, area: pg.area);
+      if (lights != null) chips.add((CupertinoIcons.lightbulb_fill, 'Lights  $lights', () => showCategory(context, ha, lay, p, backdrop, Category.lights, area: pg.area)));
     }
     return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
       Text(pg.name, style: TextStyle(color: p.text, fontSize: small ? 18 : 28, fontWeight: FontWeight.w700, letterSpacing: -.4,
           shadows: const [Shadow(color: Color(0x33000000), blurRadius: 8)])),
       const SizedBox(width: 12),
-      Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-        for (final (icon, text) in chips)
-          Padding(padding: const EdgeInsets.only(right: 8), child: Frosted(
+      Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, physics: const BouncingScrollPhysics(), child: Row(children: [
+        for (final (icon, text, onTap) in chips)
+          Padding(padding: const EdgeInsets.only(right: 8), child: Press(onTap: onTap, depth: onTap == null ? 0 : .06, child: Frosted(
             blurred: backdrop.blurred, screen: backdrop.size, radius: BorderRadius.circular(999), tint: p.glass,
             edgeTop: p.edge.withValues(alpha: min(1, p.edge.a * 1.6)), edgeBottom: p.edge.withValues(alpha: p.edge.a * .3),
-            child: Padding(padding: EdgeInsets.symmetric(horizontal: small ? 8 : 12, vertical: small ? 4 : 6),
+            child: Padding(padding: EdgeInsets.symmetric(horizontal: small ? 9 : 13, vertical: small ? 5 : 7),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(icon, size: small ? 13 : 16, color: p.text),
-              const SizedBox(width: 5),
+              const SizedBox(width: 6),
               Text(text, style: TextStyle(color: p.text, fontSize: small ? 11 : 13.5, fontWeight: FontWeight.w600)),
+              if (onTap != null) ...[const SizedBox(width: 2), Icon(CupertinoIcons.chevron_right, size: small ? 10 : 12, color: p.dim)],
             ])),
-          )),
+          ))),
       ]))),
     ]);
   }

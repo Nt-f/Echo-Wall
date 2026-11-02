@@ -263,7 +263,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
               child: HomeView(ha: ha, layout: layout!, h24: echo.h24,
                   screens: [for (final s in c.screens) if (!s.url.contains('/hassmic/wall.html')) s.name],
                   onScreen: (i) => _show(c.screens.indexWhere((s) => s.name == [for (final s in c.screens) if (!s.url.contains('/hassmic/wall.html')) s.name][i])),
-                  settings: c.settings, nextAlarm: echo.nextAlarmText, round: round),
+                  settings: c.settings, nextAlarm: echo.nextAlarmText, round: round, echo: echo),
             ))),
           _handle(),
           if (bar) _switcher(c),
@@ -281,7 +281,10 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     if (reached && c != null && c.enabled) {
       body = Stack(children: [
         body,
-        if (echo.ringing.isNotEmpty) RingOverlay(s: echo, round: round) else if (echo.words) WordsOverlay(s: echo, round: round),
+        // on the HomeView, its own glass draws these (home/voice.dart); on a web screen, the template's
+        if (current != home) ...[
+          if (echo.ringing.isNotEmpty) RingOverlay(s: echo, round: round) else if (echo.words) WordsOverlay(s: echo, round: round),
+        ],
       ]);
     }
     // never left by Back (a remote, a keyboard's Escape): the screen app is all there is; its sheets still close by it

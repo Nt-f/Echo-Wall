@@ -38,6 +38,7 @@ class MainActivity : FlutterActivity() {
                     Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, call.arguments as String) as String
                 } catch (e: Exception) { "" }
                 result.success(v); return@setMethodCallHandler
+            }
             if (call.method == "keepOn") {              // hassmic's "always on": the screen never sleeps while the app shows
                 if (call.arguments as Boolean) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

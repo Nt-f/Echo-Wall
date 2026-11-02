@@ -128,6 +128,28 @@ class _Card extends StatelessWidget {
               ])
             : RoundButton(icon: CupertinoIcons.power, fg: st.state == 'on' ? Colors.black : fg, fill: st.state == 'on' ? Colors.white : null,
                 size: 56, label: st.state == 'on' ? 'On' : 'Off', onTap: () => ha.call(d, 'toggle', id));
+        // a light's colours and whites, as Apple's presets: circles that set them (what the light supports)
+        final modes = (st.attr['supported_color_modes'] as List? ?? const []).cast<String>();
+        final colour = d == 'light' && modes.any((m) => const {'hs', 'xy', 'rgb', 'rgbw', 'rgbww'}.contains(m));
+        final white = d == 'light' && modes.contains('color_temp');
+        final presets = <(Color, Map<String, dynamic>)>[
+          if (white) ...[
+            for (final k in const [2700, 3500, 4500, 6000])
+              (Color.lerp(const Color(0xffffb46b), const Color(0xffdfeaff), (k - 2700) / 3300)!, {'color_temp_kelvin': k}),
+          ],
+          if (colour) ...[
+            for (final (c, hs) in const [(Color(0xffff5a4e), [4, 80]), (Color(0xffffa53a), [30, 85]), (Color(0xff5ad06a), [125, 70]),
+                (Color(0xff42a5ff), [210, 80]), (Color(0xffb36bff), [275, 70])])
+              (c, {'hs_color': hs}),
+          ],
+        ];
+        final presetRow = presets.isEmpty ? null : Padding(padding: EdgeInsets.only(top: small ? 12 : 22), child: Wrap(spacing: small ? 8 : 12,
+            runSpacing: 8, children: [
+          for (final (c, data) in presets)
+            Press(onTap: () => ha.call('light', 'turn_on', id, data), depth: .1, child: Container(width: small ? 28 : 38, height: small ? 28 : 38,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: c, border: Border.all(color: const Color(0x66ffffff), width: 2),
+                    boxShadow: [BoxShadow(color: c.withValues(alpha: .45), blurRadius: 10)]))),
+        ]));
         return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           BigPill(value: v, height: big, color: l.on ? l.color : Colors.white, icon: l.icon, onChange: (x) {
             switch (d) {
@@ -137,7 +159,7 @@ class _Card extends StatelessWidget {
             }
           }),
           SizedBox(width: small ? 18 : 40),
-          toggle,
+          Flexible(child: Column(mainAxisSize: MainAxisSize.min, children: [toggle, ?presetRow])),
         ]);
       case 'switch':
       case 'input_boolean':
@@ -340,5 +362,59 @@ class _ClimateState extends State<_Climate> {
         onValueChanged: (m) { if (m != null) widget.ha.call('climate', 'set_hvac_mode', widget.id, {'hvac_mode': m}); },
       )),
     ]);
+  }
+}
+
+/// a glass sheet of any content (a category's devices, the forecast): the detail's dimming, card and swipe down
+Future<void> showSheet(BuildContext context, Palette p, Backdrop? backdrop, Widget Function(BuildContext, bool small) body,
+        {double widthOf = .78, double heightOf = .86}) =>
+    Navigator.of(context).push(PageRouteBuilder(
+      opaque: false,
+      barrierDismissible: true,
+      barrierColor: const Color(0x00000000),
+      transitionDuration: const Duration(milliseconds: 380),
+      reverseTransitionDuration: const Duration(milliseconds: 280),
+      pageBuilder: (context, a, _) {
+        final page = _Sheet(p: p, anim: a, body: body, widthOf: widthOf, heightOf: heightOf);
+        return backdrop == null ? page : BackdropScope(backdrop: backdrop, child: page);
+      },
+    ));
+
+class _Sheet extends StatefulWidget {
+  final Palette p;
+  final Animation<double> anim;
+  final Widget Function(BuildContext, bool) body;
+  final double widthOf, heightOf;
+  const _Sheet({required this.p, required this.anim, required this.body, required this.widthOf, required this.heightOf});
+  @override
+  State<_Sheet> createState() => _SheetState();
+}
+
+class _SheetState extends State<_Sheet> {
+  double drag = 0;
+  void close() => Navigator.of(context).maybePop();
+  @override
+  Widget build(BuildContext context) {
+    final a = CurvedAnimation(parent: widget.anim, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+    final size = MediaQuery.sizeOf(context), small = size.shortestSide < 400;
+    final w = min(size.width * (small ? .9 : widget.widthOf), 900.0), h = size.height * (small ? .9 : widget.heightOf);
+    final b = BackdropScope.of(context);
+    final radius = BorderRadius.circular(small ? 26 : 36);
+    return AnimatedBuilder(animation: a, builder: (context, _) => Stack(children: [
+      Positioned.fill(child: GestureDetector(onTap: close, child: ColoredBox(color: Color.fromRGBO(0, 0, 0, .5 * a.value * (1 - drag / 600).clamp(0, 1))))),
+      Center(child: GestureDetector(
+        onVerticalDragUpdate: (d) => setState(() => drag = max(0, drag + d.delta.dy)),
+        onVerticalDragEnd: (d) { if (drag > 120 || (d.primaryVelocity ?? 0) > 700) { close(); } else { setState(() => drag = 0); } },
+        // rises from a little lower and a little smaller, as Apple's sheets do
+        child: Transform.translate(offset: Offset(0, drag + (1 - a.value) * 40), child: Transform.scale(scale: .94 + .06 * a.value,
+          child: Opacity(opacity: a.value, child: SizedBox(width: w, height: h, child: DecoratedBox(
+            decoration: ShapeDecoration(shape: RoundedSuperellipseBorder(borderRadius: radius),
+                shadows: const [BoxShadow(color: Color(0x59000000), blurRadius: 40, offset: Offset(0, 18))]),
+            child: Frosted(blurred: b?.blurred, screen: b?.size ?? Size.zero, radius: radius, tint: widget.p.sheet,
+                edgeTop: const Color(0x40ffffff), edgeBottom: const Color(0x0affffff),
+                child: Material(type: MaterialType.transparency, child: widget.body(context, small))),
+          ))))),
+      )),
+    ]));
   }
 }

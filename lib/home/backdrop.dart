@@ -5,6 +5,7 @@
 // from where the card is on the screen at each frame (a swipe, a press, a card flying into its detail): frosted glass
 // for the price of copying a picture.
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -14,6 +15,7 @@ import 'package:flutter/rendering.dart';
 class Backdrop extends ChangeNotifier {
   ui.Image? sharp, blurred;
   Size size = Size.zero;                        // logical, the screen's
+  double dim = .08;                             // the wallpaper's darkening: more for a bright photo (snow, sky)
   Uint8List? _bytes;
   Alignment _crop = Alignment.center;
   int _gen = 0;
@@ -48,6 +50,14 @@ class Backdrop extends ChangeNotifier {
     final bytes = _bytes, s = size;
     if (bytes == null || s.isEmpty) return;
     final gen = ++_gen;
+    // how bright the photo is (a 32-wide copy's mean): white glass and white text need a bright one dimmed more
+    final tiny = await (await ui.instantiateImageCodec(bytes, targetWidth: 32)).getNextFrame();
+    final px = (await tiny.image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    var sum = 0.0;
+    for (var i = 0; i < px.lengthInBytes; i += 4) { sum += .2126 * px.getUint8(i) + .7152 * px.getUint8(i + 1) + .0722 * px.getUint8(i + 2); }
+    tiny.image.dispose();
+    final lum = sum / (px.lengthInBytes / 4) / 255;
+    final dimNow = (.06 + max(0.0, lum - .42) * .8).clamp(.06, .36);
     // the sharp one at the screen's size (logical px: the photo's preview is ~1440 px wide anyway)
     final codec = await ui.instantiateImageCodec(bytes);
     final src = (await codec.getNextFrame()).image;
@@ -66,24 +76,25 @@ class Backdrop extends ChangeNotifier {
     Canvas(rec).drawImageRect(sharpImg, Offset.zero & s, Offset.zero & small, Paint()
       ..filterQuality = FilterQuality.medium
       ..imageFilter = ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7, tileMode: TileMode.clamp)
-      ..colorFilter = const ColorFilter.matrix(_vibrancy));
+      ..colorFilter = ColorFilter.matrix(_vibrancy(1 - dimNow * 1.2)));
     final blurImg = await rec.endRecording().toImage(small.width.ceil(), small.height.ceil());
     if (gen != _gen) { sharpImg.dispose(); blurImg.dispose(); return; }
     // the old ones are not disposed here: a card that has not been built again since (not every glass depends on the
     // scope: the chips, a route's card) would paint a disposed image, which draws nothing ("the cards' backgrounds do
     // not always show"); the garbage collector frees them once nothing holds them
-    sharp = sharpImg; blurred = blurImg;
+    sharp = sharpImg; blurred = blurImg; dim = dimNow;
     notifyListeners();
   }
 }
 
-/// saturation 1.6, brightness .88: the colours behind glass glow through it, the white on it stays readable
-const _vibrancy = <double>[
-  1.3276 * .88, -.2862 * .88, -.0414 * .88, 0, 0,
-  -.0846 * .88, 1.3138 * .88, -.0414 * .88, 0, 0,
-  -.0846 * .88, -.2862 * .88, 1.3586 * .88, 0, 0,
-  0, 0, 0, 1, 0,
-];
+/// saturation 1.6 and a brightness (lower for a bright photo): the colours behind glass glow through it, the white on
+/// it stays readable
+List<double> _vibrancy(double b) => [
+      1.3276 * b, -.2862 * b, -.0414 * b, 0, 0,
+      -.0846 * b, 1.3138 * b, -.0414 * b, 0, 0,
+      -.0846 * b, -.2862 * b, 1.3586 * b, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
 
 class BackdropScope extends InheritedNotifier<Backdrop> {
   const BackdropScope({super.key, required Backdrop backdrop, required super.child}) : super(notifier: backdrop);
@@ -102,7 +113,7 @@ class BackdropView extends StatelessWidget {
       DecoratedBox(decoration: BoxDecoration(gradient: fallback)),
       if (b?.sharp != null) AnimatedSwitcher(duration: const Duration(milliseconds: 900),
           child: RawImage(key: ValueKey(b!.sharp), image: b.sharp, fit: BoxFit.fill)),
-      const ColoredBox(color: Color(0x14000000)),
+      ColoredBox(color: Color.fromRGBO(0, 0, 0, b?.dim ?? .08)),
     ]));
   }
 }

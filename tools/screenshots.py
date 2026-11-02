@@ -255,15 +255,21 @@ def main():
             # camera, locks, what plays, the screens), a page rows x cols of them (as home_view.dart lays them out)
             ins = .146 * min(w, h) if round_ else 0
             iw, ih = (w - 2 * ins) / d, (h - 2 * ins) / d
-            rows = 3 if ih < 600 else 4 if ih < 900 else 5
-            cell = (ih - 12 - 22 - 10 * (rows - 1)) / rows
-            cols = max(2, int((iw - 24 + 10) // (cell + 10)))
+            small = ih < 360
+            gap, pad, header = (10, 10, 34) if small else (14, 16, 52)
+            avail = ih - pad - header - 22
+            rows = 2 if avail < 430 else 3 if avail < 720 else 4
+            cell = (avail - gap * (rows - 1)) / rows
+            cols = max(2, int((iw - 2 * pad + gap) // (cell + gap)))
+            cw = (iw - 2 * pad - gap * (cols - 1)) / cols
+            def cell_at(c, r):                  # a cell's middle on the screen, px
+                return int(ins + (pad + c * (cw + gap) + cw / 2) * d), int(ins + (pad + header + r * (cell + gap) + cell / 2) * d)
             for _ in range(-(-20 // (rows * cols))):
                 adb("shell", "input", "swipe", str(int(w * .8)), str(h // 2), str(int(w * .15)), str(h // 2), "250")
                 time.sleep(1.5)
             shot(os.path.join(out, f"{mid}-room.png"), round_)
             # the first widget's controls: a long press at the first cell (a round screen: inside its square)
-            fx = fy = int(ins + (12 + cell / 2) * d)
+            fx, fy = cell_at(0, 0)
             adb("shell", "input", "swipe", str(fx), str(fy), str(fx), str(fy), "800")
             time.sleep(2)
             shot(os.path.join(out, f"{mid}-controls.png"), round_)
@@ -273,6 +279,42 @@ def main():
             time.sleep(2)
             shot(os.path.join(out, f"{mid}-edit.png"), round_)
             adb("shell", "input", "swipe", str(w // 2), dy, str(w // 2), dy, "900")   # and again: done
+            time.sleep(1)
+            for _ in range(12):                 # back to Home
+                adb("shell", "input", "swipe", str(int(w * .15)), str(h // 2), str(int(w * .85)), str(h // 2), "150")
+            time.sleep(1.5)
+            # a category: the first chip beside the title (Lights)
+            adb("shell", "input", "tap", str(int(ins + (pad + (60 if small else 105) + (45 if small else 60)) * d)), str(int(ins + (pad + header / 2) * d)))
+            time.sleep(2)
+            shot(os.path.join(out, f"{mid}-category.png"), round_)
+            adb("shell", "input", "keyevent", "BACK"); time.sleep(1.2)
+            # the forecast: the date's card, where the HomeView packs it (after the analog clock and the digital one)
+            grid = [[False] * cols for _ in range(rows)]
+            spot = None
+            for wdt in (1, 2, 1):
+                for r in range(rows):
+                    for c in range(cols):
+                        if c + wdt <= cols and not any(grid[r][c + k] for k in range(wdt)) and spot is None:
+                            for k in range(wdt): grid[r][c + k] = True
+                            spot = (c, r)
+                    if spot: break
+                last, spot = spot, None
+            adb("shell", "input", "tap", *map(str, cell_at(*last)))
+            time.sleep(3)
+            shot(os.path.join(out, f"{mid}-weather.png"), round_)
+            adb("shell", "input", "keyevent", "BACK"); time.sleep(1.2)
+            # the voice assistant on the glass: listening, then the words, then an alarm ringing
+            hm.set_state(running=True, words=True, heard="", reply="")
+            time.sleep(1.5)
+            shot(os.path.join(out, f"{mid}-listening.png"), round_)
+            hm.set_state(heard="turn on the kitchen lights and dim the living room",
+                         reply="Turned on the kitchen lights and set the living room to 30 percent.")
+            time.sleep(1.5)
+            shot(os.path.join(out, f"{mid}-request.png"), round_)
+            hm.set_state(running=False, words=False, heard="", reply="", ringing="Alarm 7:30 AM", ringing_alarm=True)
+            time.sleep(1.5)
+            shot(os.path.join(out, f"{mid}-alarm.png"), round_)
+            hm.set_state(ringing="", ringing_alarm=False)
             adb("shell", "setprop", "debug.hassmic.ambient", "6")
             adb("shell", "am", "force-stop", PKG)
             adb("shell", "am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)

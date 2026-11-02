@@ -13,6 +13,7 @@ import 'backdrop.dart';
 import 'layout.dart';
 import 'model.dart';
 import 'press.dart';
+import 'sheets.dart' show weatherIcon, weatherText;
 
 class Palette {
   final Gradient wall;
@@ -366,20 +367,17 @@ class DateWeatherCard extends StatelessWidget {
               style: TextStyle(color: p.accentDay, fontWeight: FontWeight.w700, fontSize: max(11, 10.5 * u))),
           Text('${now.day}', style: TextStyle(color: p.text, fontSize: 32 * u, fontWeight: FontWeight.w300, height: .95)),
           if (w != null) Row(children: [
-            Icon(_wx[w.state] ?? Icons.cloud, size: 16 * u, color: p.text),
+            Icon(weatherIcon(w.state), size: 16 * u, color: p.text),
             SizedBox(width: 4 * u),
             Text(w.numAttr('temperature') != null ? '${w.numAttr('temperature')!.round()}°' : '',
                 style: TextStyle(color: p.text, fontSize: 15 * u, fontWeight: FontWeight.w500)),
           ]),
-          if (w != null) Text(w.state.replaceAll('-', ' ').replaceFirstMapped(RegExp('^.'), (m) => m[0]!.toUpperCase()),
+          if (w != null) Text(weatherText(w.state),
               maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.dim, fontSize: max(10, 8.5 * u))),
         ])));
   }
 }
 
-const _wx = {'sunny': Icons.wb_sunny, 'clear-night': Icons.nights_stay, 'cloudy': Icons.cloud, 'partlycloudy': Icons.wb_cloudy,
-    'rainy': Icons.grain, 'pouring': Icons.grain, 'lightning': Icons.flash_on, 'lightning-rainy': Icons.flash_on, 'snowy': Icons.ac_unit,
-    'snowy-rainy': Icons.ac_unit, 'fog': Icons.foggy, 'windy': Icons.air, 'windy-variant': Icons.air, 'hail': Icons.grain};
 
 /// a camera: its picture, again every 10 s while shown
 class CameraCard extends StatefulWidget {
@@ -403,8 +401,14 @@ class _CameraCardState extends State<CameraCard> {
   Widget build(BuildContext context) {
     final st = widget.ha.states[widget.id], u = widget.cell / 100;
     final pic = st?.attr['entity_picture'] as String?;
-    return ClipRRect(borderRadius: BorderRadius.circular(widget.cell * .19), child: Stack(fit: StackFit.expand, children: [
-      Container(color: const Color(0xff222222)),
+    // no picture (Home Assistant could not get one from the camera): said so, on glass, instead of a black square
+    final none = Glass(p: widget.p, cell: widget.cell, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(CupertinoIcons.video_camera, size: 22 * u, color: widget.p.dim),
+      SizedBox(height: 3 * u),
+      Text('No picture', style: TextStyle(color: widget.p.dim, fontSize: max(10.0, 7.5 * u), fontWeight: FontWeight.w500)),
+    ])));
+    return ClipRSuperellipse(borderRadius: BorderRadius.circular(min(30, widget.cell * .17)), child: Stack(fit: StackFit.expand, children: [
+      none,
       if (pic != null) Image.network('${widget.ha.image(pic)}&t=$n', headers: widget.ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
           errorBuilder: (_, _, _) => const SizedBox()),
       Positioned(left: 8 * u, bottom: 6 * u, right: 8 * u, child: Text(nameIn(widget.ha, widget.id, null), maxLines: 1, overflow: TextOverflow.ellipsis,
