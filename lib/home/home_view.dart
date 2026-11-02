@@ -31,10 +31,11 @@ class Item {
   final String? room;                           // a tile on Home shows its room under its name
   final int screen;                             // Kind.screen: the app's screen index
   final String name;
-  const Item(this.kind, {this.id, this.room, this.screen = -1, this.name = ''});
-  int get w => kind == Kind.thermo || kind == Kind.playing || kind == Kind.digital ? 2 : 1;
-  int get h => kind == Kind.thermo || kind == Kind.playing ? 2 : 1;
-  String get key => id ?? '${kind.name}$screen';
+  final int size;                               // Kind.playing: 4 = 2 x 2, 2 = 2 x 1, 1 = a cell (what fits on Home's first page)
+  const Item(this.kind, {this.id, this.room, this.screen = -1, this.name = '', this.size = 4});
+  int get w => kind == Kind.playing ? (size == 1 ? 1 : 2) : kind == Kind.thermo || kind == Kind.digital ? 2 : 1;
+  int get h => kind == Kind.playing ? (size == 4 ? 2 : 1) : kind == Kind.thermo ? 2 : 1;
+  String get key => kind == Kind.playing ? 'playing' : id ?? '${kind.name}$screen';   // the media card: one place, whichever player
 }
 
 class PageSpec {
@@ -198,6 +199,25 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         _ => Item(Kind.tile, id: id, room: room),
       };
 
+  /// the media card's player: always one, so the card stays where it was put (an AirPlay stream has no title, a paused
+  /// one is not playing): what plays (the one shown before, else one with a title), else the last that played, else
+  /// one that is on
+  String? nowPlayer() {
+    bool ok(String id) => ha.states.containsKey(id) && !lay.hidden.contains(id) && ha.states[id]!.state != 'unavailable';
+    final players = ha.states.keys.where((id) => domainOf(id) == 'media_player' && ok(id)).toList();
+    if (players.isEmpty) return null;
+    bool titled(String id) => ha.states[id]!.attr['media_title'] != null;
+    final playing = players.where((id) => ha.states[id]!.state == 'playing').toList();
+    final now = (playing.contains(lay.player) ? lay.player : null) ?? playing.where(titled).firstOrNull ?? playing.firstOrNull;
+    if (now != null) {
+      if (now != lay.player) { lay.player = now; lay.saveLater(); }
+      return now;
+    }
+    if (lay.player != null && ok(lay.player!)) return lay.player;
+    bool on(String id) => !const {'off', 'standby', 'unknown'}.contains(ha.states[id]!.state);
+    return players.where(titled).firstOrNull ?? players.where(on).firstOrNull ?? players.first;
+  }
+
   List<PageSpec> pages(int cols, int rows) {
     final out = <PageSpec>[];
     _items.clear();
@@ -208,9 +228,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     ];
     final fav = favorites();
     for (final id in fav) { home.add(itemOf(id, room: ha.areaName(ha.areaOf(id)))); }
-    final playing = ha.states.entries.where((e) => domainOf(e.key) == 'media_player' && e.value.state == 'playing'
-        && e.value.attr['media_title'] != null && !lay.hidden.contains(e.key)).map((e) => e.key).firstOrNull;
-    if (playing != null && !fav.contains(playing)) home.add(Item(Kind.playing, id: playing));
+    final player = nowPlayer();
+    if (player != null) home.add(Item(Kind.playing, id: player));
     for (var i = 0; i < widget.screens.length; i++) { home.add(Item(Kind.screen, screen: i, name: widget.screens[i])); }
     final ho = lay.homeOrder;
     if (ho.isNotEmpty) {                        // as moved (List.sort is not stable: ties keep their index)
@@ -218,7 +237,16 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       int at(Item it) { final i = ho.indexOf(it.key); return i < 0 ? (1 << 20) + idx[it.key]! : i; }
       home.sort((a, b) => at(a).compareTo(at(b)));
     }
-    out.addAll(_pack('Home', '', null, home, cols, rows));
+    // the media card on Home's first page: as big as there is room for there (the owner's widgets keep their places),
+    // unless it was put on another page; while a widget is dragged, the size it had
+    List<Item> sized(int n) => [for (final it in home) it.kind == Kind.playing ? Item(Kind.playing, id: it.id, size: n) : it];
+    final putAt = lay.place['home']?['playing']?.first ?? 0;
+    final sizes = player == null || (dragging != null && liveArea == 'home') ? [_playSize] : putAt > 0 ? const [4] : const [4, 2, 1];
+    for (final n in sizes) {
+      final hp = _pack('Home', '', null, sized(n), cols, rows);
+      _playSize = n;
+      if (n == sizes.last || hp.first.placed.any((e) => e.$1.kind == Kind.playing)) { out.addAll(hp); break; }
+    }
 
     final byArea = <String, List<String>>{};
     for (final id in ha.states.keys) {
@@ -255,6 +283,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return ps;
   }
   final _spotsOf = <String, Map<String, Spot>>{};
+  int _playSize = 4;
 
   // ---------------------------------------------------------------- drawing
 
@@ -346,7 +375,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       Kind.digital => DigitalClockCard(p: p, cell: cell, h24: widget.h24, wide: true),
       Kind.date => Press(onTap: () => showWeather(context, ha, p, backdrop), child: DateWeatherCard(ha: ha, p: p, cell: cell)),
       Kind.thermo => ThermostatCard(ha: ha, p: p, id: it.id!, cell: cell, onLong: more),
-      Kind.playing => NowPlayingCard(ha: ha, p: p, id: it.id!, cell: cell, onLong: more),
+      Kind.playing => NowPlayingCard(ha: ha, p: p, id: it.id!, cell: cell, size: it.size, onLong: more),
       Kind.camera => CameraCard(ha: ha, p: p, id: it.id!, cell: cell),
       Kind.screen => ScreenTile(p: p, name: it.name, cell: cell, onTap: () => widget.onScreen(it.screen)),
       Kind.tile => AccessoryTile(ha: ha, p: p, id: it.id!, room: it.room, cell: cell, onLong: more),
@@ -439,7 +468,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           lay.favorites = fav.contains(id) ? (fav..remove(id)) : [...fav, id];
           lay.changed();
         }, left: true),
-        if (id != null) badge('−', const Color(0xffff453a), Colors.white, () {
+        if (id != null && it.kind != Kind.playing) badge('−', const Color(0xffff453a), Colors.white, () {
           if (onHome) { lay.favorites = fav..remove(id); } else { lay.hidden.add(id); if (lay.favorites != null) lay.favorites!.remove(id); }
           lay.changed();
         }, left: false),

@@ -241,45 +241,75 @@ class _ThermostatCardState extends State<ThermostatCard> {
   }
 }
 
-/// what plays: its cover, the title big, the buttons
+/// what plays: its cover, the title big, the buttons.  Always on Home (home_view.dart nowPlayer), at the size that fits
+/// on its first page: 4 = 2 x 2 cells, 2 = 2 x 1 (the cover beside the words), 1 = a tile (the cover, the title, play)
 class NowPlayingCard extends StatelessWidget {
   final Ha ha;
   final Palette p;
   final String id;
   final double cell;
+  final int size;
   final VoidCallback onLong;
-  const NowPlayingCard({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong});
+  const NowPlayingCard({super.key, required this.ha, required this.p, required this.id, required this.cell, this.size = 4, required this.onLong});
   @override
   Widget build(BuildContext context) {
     final st = ha.states[id], u = cell * 2.07 / 100;
     final pic = st?.attr['entity_picture'] as String?;
+    final title = st?.attr['media_title'] as String?, idle = title == null && st?.state != 'playing';
+    final top = (idle ? 'Not Playing' : title ?? st?.name ?? '').toUpperCase();
+    final under = idle || title == null ? st?.name ?? '' : '${st?.attr['media_artist'] ?? st?.attr['media_album_name'] ?? ''}';
+    final playing = st?.state == 'playing';
     void c(String s) => ha.call('media_player', s, id);
-    return GestureDetector(
-      onTap: onLong, onLongPress: onLong,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(cell * .2),
-        child: Stack(fit: StackFit.expand, children: [
-          if (pic != null) Image.network(ha.image(pic).toString(), headers: ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
-              errorBuilder: (_, _, _) => Container(color: const Color(0xff2a2f45)))
-          else Container(color: const Color(0xff2a2f45)),
-          const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: [Color(0x00000000), Color(0xa6000000)], stops: [.3, 1]))),
+    Widget cover(double note) => pic != null
+        ? Image.network(ha.image(pic).toString(), headers: ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
+            errorBuilder: (_, _, _) => Container(color: const Color(0xff2a2f45)))
+        : Container(color: const Color(0xff2a2f45), alignment: Alignment.center, child: Icon(Icons.music_note, color: Colors.white24, size: note));
+    Widget button(IconData i, double s, String svc) => GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => c(svc),
+        child: Padding(padding: EdgeInsets.all(2 * u), child: Icon(i, color: Colors.white, size: s)));
+    Text topText(double f) => Text(top, maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: f));
+    Text underText(double f) => Text(under, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white70, fontSize: f));
+    const shade = DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Color(0x00000000), Color(0xa6000000)], stops: [.3, 1])));
+    final body = switch (size) {
+      1 => Stack(fit: StackFit.expand, children: [
+          cover(22 * u),
+          shade,
+          Positioned(top: 2 * u, right: 2 * u, child: button(playing ? Icons.pause_circle_filled : Icons.play_circle_filled, 15 * u, 'media_play_pause')),
+          Padding(padding: EdgeInsets.fromLTRB(5 * u, 0, 5 * u, 4 * u), child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end, children: [topText(5.6 * u), underText(max(10, 4.4 * u))])),
+        ]),
+      2 => Container(color: const Color(0xff1f2233), child: Row(children: [
+          AspectRatio(aspectRatio: 1, child: cover(26 * u)),
+          Expanded(child: Padding(padding: EdgeInsets.fromLTRB(6 * u, 4 * u, 4 * u, 3 * u), child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center, children: [
+            topText(6.6 * u),
+            underText(max(10, 5 * u)),
+            SizedBox(height: 2 * u),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              button(Icons.skip_previous, 12 * u, 'media_previous_track'),
+              button(playing ? Icons.pause : Icons.play_arrow, 16 * u, 'media_play_pause'),
+              button(Icons.skip_next, 12 * u, 'media_next_track'),
+            ]),
+          ]))),
+        ])),
+      _ => Stack(fit: StackFit.expand, children: [
+          Align(alignment: const Alignment(0, -.35), child: SizedBox.expand(child: cover(34 * u))),
+          shade,
           Padding(padding: EdgeInsets.fromLTRB(7 * u, 6 * u, 7 * u, 4 * u), child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end, children: [
-            Text('${st?.attr['media_title'] ?? st?.name ?? ''}'.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 8 * u)),
-            Text('${st?.attr['media_artist'] ?? st?.attr['media_album_name'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.white70, fontSize: max(10, 5.4 * u))),
+            topText(8 * u),
+            underText(max(10, 5.4 * u)),
             Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
               IconButton(iconSize: 13 * u, color: Colors.white, onPressed: () => c('media_previous_track'), icon: const Icon(Icons.skip_previous)),
-              IconButton(iconSize: 17 * u, color: Colors.white, onPressed: () => c('media_play_pause'),
-                  icon: Icon(st?.state == 'playing' ? Icons.pause : Icons.play_arrow)),
+              IconButton(iconSize: 17 * u, color: Colors.white, onPressed: () => c('media_play_pause'), icon: Icon(playing ? Icons.pause : Icons.play_arrow)),
               IconButton(iconSize: 13 * u, color: Colors.white, onPressed: () => c('media_next_track'), icon: const Icon(Icons.skip_next)),
             ]),
           ])),
         ]),
-      ),
-    );
+    };
+    return GestureDetector(onTap: onLong, onLongPress: onLong,
+        child: ClipRRect(borderRadius: BorderRadius.circular(size == 4 ? cell * .2 : cell * .16), child: body));
   }
 }
 

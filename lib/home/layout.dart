@@ -17,6 +17,7 @@ class Layout extends ChangeNotifier {
   List<String> homeOrder = [];                  // Home's widgets by key (clocks, date, screens, devices), as moved
   /// where each widget was put, per page group (`home`, `area:<area id>`): key -> [page, column, row]
   Map<String, Map<String, List<int>>> place = {};
+  String? player;                               // the media card's: the last player that played (it stays on it)
   int ambientSeconds = 120;                     // 0: never
   bool analogClock = true, digitalClock = true;
   File? _file;
@@ -41,16 +42,22 @@ class Layout extends ChangeNotifier {
       for (final g in (j['place'] as Map<String, dynamic>? ?? const {}).entries)
         g.key: {for (final e in (g.value as Map<String, dynamic>).entries) e.key: (e.value as List).cast<num>().map((n) => n.toInt()).toList()}
     };
+    player = j['player'] as String?;
     ambientSeconds = (j['ambient'] as num? ?? 120).toInt();
     analogClock = j['analog_clock'] != false;
     digitalClock = j['digital_clock'] != false;
   }
 
-  Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order, 'home_order': homeOrder, 'place': place,
+  Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order, 'home_order': homeOrder, 'place': place, 'player': player,
       'ambient': ambientSeconds, 'analog_clock': analogClock, 'digital_clock': digitalClock};
 
   void changed() {
     notifyListeners();
+    saveLater();
+  }
+
+  /// saved, without a rebuild (what is remembered while drawing: the media card's player)
+  void saveLater() {
     _save?.cancel();
     _save = Timer(const Duration(milliseconds: 500), () => _file?.writeAsString(jsonEncode(toJson())));
   }
