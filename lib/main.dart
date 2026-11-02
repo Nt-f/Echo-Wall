@@ -147,7 +147,8 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
 
   /// the first web page among the screens (where a tap on the clock goes), the current one where there is none
   int _firstPage(ScreenConfig c) {
-    final i = c.screens.indexWhere((s) => !s.url.startsWith('hassmic:'));
+    // never the old web wall panel: the HomeView replaces it (an integration set up before still lists it)
+    final i = c.screens.indexWhere((s) => !s.url.startsWith('hassmic:') && !s.url.contains('/hassmic/wall.html'));
     return i < 0 ? current : i;
   }
 
@@ -252,7 +253,8 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
           // the clock fades in over the page (back after idle) and out into it (a tap: the first web screen)
           Positioned.fill(child: IgnorePointer(ignoring: !ownScreen(c), child: AnimatedOpacity(
             opacity: ownScreen(c) ? 1 : 0, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut,
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _show(_firstPage(c)),
+            // a tap: Home (the template goes to the first web screen; here the HomeView is the home)
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: layout != null ? _home : () => _show(_firstPage(c)),
                 child: ClockScreen(s: echo, round: round)),
           ))),
           // the HomeView, the same way: faded out into a web screen (its tile), back in after idle
