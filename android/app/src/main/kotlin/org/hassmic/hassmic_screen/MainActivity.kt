@@ -32,6 +32,12 @@ class MainActivity : FlutterActivity() {
                 } catch (e: Exception) { "" }
                 result.success(resources.configuration.isScreenRound || prop == "1"); return@setMethodCallHandler
             }
+            if (call.method == "prop") {                // debug.hassmic.* for screenshots (an idle clock sooner)
+                val v = try {
+                    Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, call.arguments as String) as String
+                } catch (e: Exception) { "" }
+                result.success(v); return@setMethodCallHandler
+            }
             if (call.method == "hasInputMethod") {      // an Echo: none; elsewhere the device's own keyboard types
                 val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
                 result.success(imm.enabledInputMethodList.isNotEmpty()); return@setMethodCallHandler

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Screenshots of hassmic-screen on Echo screens, for the README (docs/screenshots/).
+"""Screenshots of hassmic HomeView on Echo screens, for the README (docs/screenshots/).
 
 Every model is an Android emulator with that screen's resolution and density (not Fire OS: layouts and resolution are
 what this shows, not the Echo's speed); what it shows comes from a Home Assistant with the demo integration (made-up
@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDK = os.environ.get("ANDROID_HOME", os.path.expanduser("~/Android/Sdk"))
 ADB, EMU = os.path.join(SDK, "platform-tools", "adb"), os.path.join(SDK, "emulator", "emulator")
 HA_PORT, HASSMIC_PORT, SERIAL = 18123, 28931, "emulator-5554"
-PKG = "org.hassmic.screen"
+PKG = "org.hassmic.homeview"
 
 # (id, name, width, height, density, density known or estimated, round)
 MODELS = [
@@ -85,6 +85,31 @@ async def ha_token():
         await ws.receive_json(); await ws.send_json({"type": "auth", "access_token": tok}); await ws.receive_json()
         await ws.send_json({"id": 1, "type": "auth/long_lived_access_token", "client_name": "screenshots", "lifespan": 10})
         r = await ws.receive_json()
+        # rooms for the demo's things (it gives some devices none): what the HomeView's pages are made of
+        n = [10]
+        async def q(**m):
+            n[0] += 1; await ws.send_json({"id": n[0], **m})
+            while True:
+                x = await ws.receive_json()
+                if x.get("id") == n[0]: return x.get("result")
+        await asyncio.sleep(3)
+        areas = {a["name"]: a["area_id"] for a in await q(type="config/area_registry/list")}
+        for name in ("Kitchen", "Living Room", "Bedroom", "Office"):
+            if name not in areas: areas[name] = (await q(type="config/area_registry/create", name=name))["area_id"]
+        reg = {e["entity_id"]: e for e in await q(type="config/entity_registry/list")}
+        place = {"light.ceiling_lights": "Living Room", "light.bed_light": "Bedroom", "light.kitchen_lights": "Kitchen",
+                 "light.office_rgbw_lights": "Office", "light.living_room_rgbww_lights": "Living Room", "light.entrance_color_white_lights": "Living Room",
+                 "cover.kitchen_window": "Kitchen", "cover.living_room_window": "Living Room", "cover.hall_window": "Living Room",
+                 "climate.hvac": "Living Room", "climate.ecobee": "Bedroom", "climate.heatpump": "Office",
+                 "switch.decorative_lights": "Living Room", "switch.ac": "Bedroom", "fan.living_room_fan": "Living Room",
+                 "fan.ceiling_fan": "Bedroom", "lock.front_door": "Living Room", "lock.kitchen_door": "Kitchen",
+                 "media_player.living_room": "Living Room", "media_player.bedroom": "Bedroom", "media_player.kitchen": "Kitchen",
+                 "camera.demo_camera": "Living Room", "humidifier.humidifier": "Bedroom"}
+        for eid, a in place.items():
+            e = reg.get(eid)
+            if not e: continue
+            if e.get("device_id"): await q(type="config/device_registry/update", device_id=e["device_id"], area_id=areas[a])
+            else: await q(type="config/entity_registry/update", entity_id=eid, area_id=areas[a])
         await ws.close()
         return r["result"]
 
@@ -221,31 +246,32 @@ def main():
             adb("shell", "setprop", "debug.hassmic.round", "1" if round_ else "0")      # the app's round layout
             screen(w, h, dpi)
             hm.screens(token, 0)
+            adb("shell", "setprop", "debug.hassmic.ambient", "0")
             adb("shell", "am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
-            time.sleep(25)                      # Home Assistant's frontend in the WebView
-            shot(os.path.join(out, f"{mid}-dashboard.png"), round_)
-            adb("shell", "input", "tap", str(w // 2), str(max(4, 12 * dpi // 160)))        # the handle
+            time.sleep(14)                      # the HomeView: Home Assistant's websocket, no web page
+            shot(os.path.join(out, f"{mid}-home.png"), round_)
+            d = dpi / 160
+            adb("shell", "input", "swipe", str(int(w * .8)), str(h // 2), str(int(w * .15)), str(h // 2), "250")     # the next page: a room
             time.sleep(2)
-            shot(os.path.join(out, f"{mid}-switcher.png"), round_)
-            hm.screens(token, 2)                # the sign-in page first, its user name field tapped: the keyboard comes
-            time.sleep(20)
-            at = asyncio.run(field_center())
-            if at:
-                adb("shell", "input", "tap", str(int(at[0])), str(int(at[1])))
-                time.sleep(2)
-            shot(os.path.join(out, f"{mid}-keyboard.png"), round_)
-            # hassmic's own pictures, drawn by the app (docs/screen-apps.md): the clock, a request, an alarm ringing
-            hm.screens(token, 0, clock=True)
-            time.sleep(4)
-            shot(os.path.join(out, f"{mid}-clock.png"), round_)
-            hm.set_state(running=True, words=True, heard="turn on the kitchen lights and dim the living room",
-                         reply="Turned on the kitchen lights and set the living room to 30 percent.")
+            shot(os.path.join(out, f"{mid}-room.png"), round_)
+            # the first widget's controls: a long press at the first cell
+            rows = 3 if h / d < 600 else 4 if h / d < 900 else 5
+            cell = (h / d - 12 - 22 - 10 * (rows - 1)) / rows
+            adb("shell", "input", "swipe", str(int((12 + cell / 2) * d)), str(int((12 + cell / 2) * d)),
+                str(int((12 + cell / 2) * d)), str(int((12 + cell / 2) * d)), "800")
             time.sleep(2)
-            shot(os.path.join(out, f"{mid}-request.png"), round_)
-            hm.set_state(running=False, words=False, heard="", reply="", ringing="Alarm 7:30 AM", ringing_alarm=True)
+            shot(os.path.join(out, f"{mid}-controls.png"), round_)
+            adb("shell", "input", "keyevent", "BACK"); time.sleep(1)
+            adb("shell", "input", "swipe", str(w // 2), str(int(h - 11 * d)), str(w // 2), str(int(h - 11 * d)), "900")   # hold the dots
             time.sleep(2)
-            shot(os.path.join(out, f"{mid}-alarm.png"), round_)
-            hm.set_state(ringing="", ringing_alarm=False)
+            shot(os.path.join(out, f"{mid}-edit.png"), round_)
+            adb("shell", "input", "swipe", str(w // 2), str(int(h - 11 * d)), str(w // 2), str(int(h - 11 * d)), "900")   # and again: done
+            adb("shell", "setprop", "debug.hassmic.ambient", "6")
+            adb("shell", "am", "force-stop", PKG)
+            adb("shell", "am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
+            time.sleep(22)
+            shot(os.path.join(out, f"{mid}-ambient.png"), round_)
+            adb("shell", "setprop", "debug.hassmic.ambient", "0")
     except Exception:
         print(open(os.path.join(tmp, "ha.log"), errors="replace").read()[-3000:], file=sys.stderr)
         raise

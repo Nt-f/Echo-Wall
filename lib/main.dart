@@ -1,3 +1,7 @@
+// hassmic HomeView: Home Assistant on an Echo Show as Apple's HomeView shows a home (lib/home/), on hassmic-screen
+// (the template this is a fork of: the contract with hassmic, the web screens, the keyboard, hassmic's pictures).
+// The HomeView is the first screen; the integration's screens follow it in the switcher and as tiles on Home.
+//
 // hassmic-screen: a screen app for an Echo Show running hassmic (echo-dot-assist docs/screen-apps.md), in Flutter.
 // It does what hassmic's own Java kiosk does, as a template to build on: the screens Home Assistant's hassmic
 // integration chose (Home Assistant's dashboards, Music Assistant, any page) in a WebView, logged into Home Assistant
@@ -14,6 +18,9 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'hassmic.dart';
 import 'echo_ui.dart';
+import 'ha.dart';
+import 'home/home_view.dart';
+import 'home/layout.dart';
 import 'keyboard.dart';
 
 void main() {
@@ -44,6 +51,9 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   final hassmic = Hassmic();
   final feed = EchoStateFeed();
   EchoState echo = const EchoState();
+  final ha = Ha();
+  Layout? layout;
+  static const home = -2;                       // `current` while the HomeView shows
   ScreenConfig? cfg;
   bool reached = false, front = true;
   WebViewController? web;
@@ -65,6 +75,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     const MethodChannel('hassmic/keys').invokeMethod<bool>('isRound').then((r) {
       if (mounted && r == true) setState(() => round = true);
     }).catchError((_) {});
+    Layout.load().then((l) { if (mounted) setState(() => layout = l); });
     _schedule(Duration.zero);
     feed.start((s) { if (mounted) setState(() => echo = s); });      // the words, a ring, the clock's next alarm
   }
@@ -105,15 +116,16 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
       final sameScreens = old != null && _urls(old) == _urls(c);
       setState(() { cfg = c; reached = true; });
       if (newLogin) injectedFor = '';
-      if (!c.enabled || c.screens.isEmpty) { _stop(); return; }
+      ha.configure(c.enabled ? c.ha : '', c.token);   // the HomeView's own connection, with the Echo's login
+      if (!c.enabled) { _stop(); return; }
       _start();
-      if (!sameScreens || newLogin || current < 0 || current >= c.screens.length) _show(c.defaultScreen);
+      if (!sameScreens || newLogin || current == -1 || current >= c.screens.length) _home();
       return;
     }
-    // untouched long enough on another screen: back to the start one
-    if (c.enabled && web != null && c.returnSeconds > 0 && current != c.defaultScreen &&
+    // untouched long enough on another screen: back to the HomeView
+    if (c.enabled && web != null && c.returnSeconds > 0 && current != home &&
         DateTime.now().difference(touched).inSeconds > c.returnSeconds) {
-      _show(c.defaultScreen);
+      _home();
     }
   }
 
@@ -161,6 +173,11 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     return '${x.scheme}://${x.host}${x.hasPort ? ':${x.port}' : ''}';
   }
 
+  void _home() {
+    setState(() { current = home; bar = false; typing = false; });
+    touched = DateTime.now();
+  }
+
   void _show(int i) {
     final c = cfg, w = web;
     if (c == null || w == null || i < 0 || i >= c.screens.length) return;
@@ -200,10 +217,12 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
           // a screen of hassmic's this app draws, else the page; the WebView stays (its page kept) under the clock
           WebViewWidget(controller: w),
           if (ownScreen(c)) Positioned.fill(child: ClockScreen(s: echo, round: round)),
+          if (current == home && layout != null)
+            Positioned.fill(child: HomeView(ha: ha, layout: layout!, h24: echo.h24, screens: [for (final s in c.screens) s.name], onScreen: _show)),
           _handle(),
           if (bar) _switcher(c),
         ])),
-        if (typing && ownKeyboard && !ownScreen(c))
+        if (typing && ownKeyboard && !ownScreen(c) && current != home)
           Keyboard(
             round: round,
             numbers: numbers,
@@ -256,6 +275,8 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(color: const Color(0xe6202124), borderRadius: BorderRadius.circular(18)),
           child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: _pill('Home', current == home ? 0x55ffffff : 0x33ffffff, _home)),
             for (var i = 0; i < c.screens.length; i++)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),

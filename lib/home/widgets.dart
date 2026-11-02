@@ -34,9 +34,9 @@ class Palette {
 }
 
 /// the wallpaper with two soft lights, once
-class Wallpaper_ extends StatelessWidget {
+class WallpaperView extends StatelessWidget {
   final Palette p;
-  const Wallpaper_(this.p, {super.key});
+  const WallpaperView(this.p, {super.key});
   @override
   Widget build(BuildContext context) => DecoratedBox(
         decoration: BoxDecoration(gradient: p.wall),
@@ -184,7 +184,7 @@ class NowPlayingCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(cell * .2),
         child: Stack(fit: StackFit.expand, children: [
           if (pic != null) Image.network(ha.image(pic).toString(), headers: ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => Container(color: const Color(0xff2a2f45)))
+              errorBuilder: (_, _, _) => Container(color: const Color(0xff2a2f45)))
           else Container(color: const Color(0xff2a2f45)),
           const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0x00000000), Color(0xa6000000)], stops: [.3, 1]))),
@@ -331,7 +331,7 @@ class _CameraCardState extends State<CameraCard> {
     return ClipRRect(borderRadius: BorderRadius.circular(widget.cell * .19), child: Stack(fit: StackFit.expand, children: [
       Container(color: const Color(0xff222222)),
       if (pic != null) Image.network('${widget.ha.image(pic)}&t=$n', headers: widget.ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => const SizedBox()),
+          errorBuilder: (_, _, _) => const SizedBox()),
       Positioned(left: 8 * u, bottom: 6 * u, right: 8 * u, child: Text(nameIn(widget.ha, widget.id, null), maxLines: 1, overflow: TextOverflow.ellipsis,
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: max(10, 9 * u), shadows: const [Shadow(blurRadius: 3)]))),
     ]));

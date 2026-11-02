@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../ha.dart';
 import 'layout.dart';
@@ -85,11 +86,17 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   Ha get ha => widget.ha;
   Layout get lay => widget.layout;
 
+  int? ambientOverride;                         // debug.hassmic.ambient (screenshots)
+
   @override
   void initState() {
     super.initState();
+    const MethodChannel('hassmic/keys').invokeMethod<String>('prop', 'debug.hassmic.ambient').then((v) {
+      final n = int.tryParse(v ?? '');
+      if (n != null && n > 0) ambientOverride = n;
+    }).catchError((_) {});
     idle = Timer.periodic(const Duration(seconds: 5), (_) {
-      final s = lay.ambientSeconds;
+      final s = ambientOverride ?? lay.ambientSeconds;
       if (s > 0 && !ambient && !editing && DateTime.now().difference(touched).inSeconds >= s && ModalRoute.of(context)?.isCurrent != false) {
         setState(() => ambient = true);
       }
@@ -176,7 +183,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return ListenableBuilder(listenable: Listenable.merge([ha, lay]), builder: (context, _) => Listener(
       onPointerDown: (_) { touched = DateTime.now(); if (ambient) setState(() => ambient = false); },
       child: Stack(children: [
-        Positioned.fill(child: Wallpaper_(p)),
+        Positioned.fill(child: WallpaperView(p)),
         LayoutBuilder(builder: (context, box) {
           const gap = 10.0, pad = 12.0, bottom = 22.0;
           final rows = box.maxHeight < 600 ? 3 : box.maxHeight < 900 ? 4 : 5;
@@ -267,10 +274,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       onWillAcceptWithDetails: (d) {
         final o = liveOrder;
         if (o == null || d.data == key || liveArea != area) return false;
-        setState(() { o.remove(d.data); o.insert(o.indexOf(key) + (o.indexOf(key) >= 0 ? 0 : 0), d.data); });
+        // the dragged one takes this one's place; this one and those after it move on
+        setState(() { o.remove(d.data); final at = o.indexOf(key); o.insert(at < 0 ? o.length : at, d.data); });
         return true;
       },
-      builder: (_, __, ___) => Stack(clipBehavior: Clip.none, children: [
+      builder: (_, _, _) => Stack(clipBehavior: Clip.none, children: [
         Positioned.fill(child: draggable),
         if (id != null && !onHome) badge('★', Colors.white, fav.contains(id) ? const Color(0xfff5a623) : const Color(0xffb8b8b8), () {
           lay.favorites = fav.contains(id) ? (fav..remove(id)) : [...fav, id];
@@ -359,7 +367,7 @@ class _Ambient extends StatelessWidget {
   const _Ambient({required this.p, required this.h24, required this.ha});
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
-        Wallpaper_(p),
+        WallpaperView(p),
         LayoutBuilder(builder: (context, box) {
           final size = min(box.maxHeight * .78, box.maxWidth * .3);
           return TickerBuilder(builder: (now) {
