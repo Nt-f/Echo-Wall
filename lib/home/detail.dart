@@ -367,7 +367,7 @@ class _ClimateState extends State<_Climate> {
 
 /// a glass sheet of any content (a category's devices, the forecast): the detail's dimming, card and swipe down
 Future<void> showSheet(BuildContext context, Palette p, Backdrop? backdrop, Widget Function(BuildContext, bool small) body,
-        {double widthOf = .78, double heightOf = .86}) =>
+        {double widthOf = .78, double heightOf = .86, double maxHeight = 900}) =>
     Navigator.of(context).push(PageRouteBuilder(
       opaque: false,
       barrierDismissible: true,
@@ -375,7 +375,7 @@ Future<void> showSheet(BuildContext context, Palette p, Backdrop? backdrop, Widg
       transitionDuration: const Duration(milliseconds: 380),
       reverseTransitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (context, a, _) {
-        final page = _Sheet(p: p, anim: a, body: body, widthOf: widthOf, heightOf: heightOf);
+        final page = _Sheet(p: p, anim: a, body: body, widthOf: widthOf, heightOf: heightOf, maxHeight: maxHeight);
         return backdrop == null ? page : BackdropScope(backdrop: backdrop, child: page);
       },
     ));
@@ -384,8 +384,8 @@ class _Sheet extends StatefulWidget {
   final Palette p;
   final Animation<double> anim;
   final Widget Function(BuildContext, bool) body;
-  final double widthOf, heightOf;
-  const _Sheet({required this.p, required this.anim, required this.body, required this.widthOf, required this.heightOf});
+  final double widthOf, heightOf, maxHeight;           // a sheet no taller than its content wants (a Show 15 hung upright)
+  const _Sheet({required this.p, required this.anim, required this.body, required this.widthOf, required this.heightOf, required this.maxHeight});
   @override
   State<_Sheet> createState() => _SheetState();
 }
@@ -397,7 +397,7 @@ class _SheetState extends State<_Sheet> {
   Widget build(BuildContext context) {
     final a = CurvedAnimation(parent: widget.anim, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
     final size = MediaQuery.sizeOf(context), small = size.shortestSide < 400;
-    final w = min(size.width * (small ? .9 : widget.widthOf), 900.0), h = size.height * (small ? .9 : widget.heightOf);
+    final w = min(size.width * (small ? .9 : widget.widthOf), 900.0), h = min(size.height * (small ? .9 : widget.heightOf), widget.maxHeight);
     final b = BackdropScope.of(context);
     final radius = BorderRadius.circular(small ? 26 : 36);
     return AnimatedBuilder(animation: a, builder: (context, _) => Stack(children: [

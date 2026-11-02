@@ -105,7 +105,7 @@ Future<void> showWeather(BuildContext context, Ha ha, Palette p, Backdrop backdr
   if (id == null) return Future.value();
   final forecast = ha.send({'type': 'call_service', 'domain': 'weather', 'service': 'get_forecasts', 'service_data': {'type': 'daily'},
       'target': {'entity_id': id}, 'return_response': true}).then((r) => ((r as Map)['response']?[id]?['forecast'] as List? ?? const []).cast<Map>());
-  return showSheet(context, p, backdrop, widthOf: .72, heightOf: .78, (context, small) => ListenableBuilder(listenable: ha, builder: (context, _) {
+  return showSheet(context, p, backdrop, widthOf: .72, heightOf: .78, maxHeight: 560, (context, small) => ListenableBuilder(listenable: ha, builder: (context, _) {
     final st = ha.states[id]!;
     final fg = p.sheetText;
     return Padding(padding: EdgeInsets.all(small ? 14 : 26), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
