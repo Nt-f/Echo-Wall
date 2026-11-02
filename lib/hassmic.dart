@@ -19,7 +19,9 @@ class ScreenConfig {
   final String ha, token;
   final List<Screen> screens;
   final int defaultScreen, returnSeconds;
-  ScreenConfig._(this.raw, this.enabled, this.ha, this.token, this.screens, this.defaultScreen, this.returnSeconds);
+  /// the app's own settings, typed into the integration's options ("Screen app settings": key=value lines)
+  final Map<String, String> settings;
+  ScreenConfig._(this.raw, this.enabled, this.ha, this.token, this.screens, this.defaultScreen, this.returnSeconds, this.settings);
 
   factory ScreenConfig.parse(String raw) {
     final j = jsonDecode(raw) as Map<String, dynamic>;
@@ -32,7 +34,8 @@ class ScreenConfig {
     var def = d0 >= 0 && d0 < all.length ? screens.indexOf(all[d0]) : 0;
     if (def < 0) def = 0;
     return ScreenConfig._(raw, j['enabled'] == true, '${j['ha'] ?? ''}', '${j['token'] ?? ''}', screens, def,
-        (j['return'] as num? ?? 0).toInt());
+        (j['return'] as num? ?? 0).toInt(),
+        {for (final e in (j['settings'] as Map<String, dynamic>? ?? const {}).entries) e.key: '${e.value}'});
   }
 }
 

@@ -10,6 +10,9 @@ void main() {
     expect(c.screens[1].name, 'Music');
     expect(c.defaultScreen, 0);          // out of range: the first
     expect(c.returnSeconds, 120);
+    expect(c.settings, isEmpty);
+    final d = ScreenConfig.parse('{"enabled":true,"screens":[],"settings":{"immich.url":"http://x:2283"}}');
+    expect(d.settings['immich.url'], 'http://x:2283');
   });
 
   test('screens of hassmic\'s own: the clock kept, others left out, the start screen found again', () {
