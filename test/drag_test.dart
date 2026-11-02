@@ -106,4 +106,28 @@ void main() {
       expect(cached, isFalse, reason: 'a RepaintBoundary between a widget\'s glass and the pages');
     }
   });
+
+  testWidgets('swiped to a room: every widget\'s glass drawn from where it is', (t) async {
+    t.view.physicalSize = const Size(960, 480);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final ha = Ha()..connected = true;
+    // unavailable, as the Echo's own entities were: their tiles at half opacity, a layer of their own
+    for (final n in ['a', 'b', 'c', 'd', 'e']) { ha.states['switch.$n'] = EntityState('unavailable', {'friendly_name': 'Switch $n'}); }
+    final lay = Layout()..wallpaper = Wallpaper.amber..favorites = []..ambientSeconds = 0;
+    await t.pumpWidget(MaterialApp(home: HomeView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.runAsync(() => Future.delayed(const Duration(milliseconds: 500)));   // the wallpaper painted and blurred
+    await t.pump(const Duration(milliseconds: 100));
+    await t.fling(find.byType(PageView), const Offset(-700, 0), 2000);
+    for (var i = 0; i < 40; i++) { await t.pump(const Duration(milliseconds: 16)); }
+    expect(find.text('Switch a'), findsOneWidget);
+    final glass = find.byType(Frosted).evaluate().map((e) => e.renderObject as RenderFrosted).where((r) => r.attached).toList();
+    expect(glass, isNotEmpty);
+    for (final r in glass) {
+      final real = MatrixUtils.transformRect(r.getTransformTo(null), Offset.zero & r.size);
+      expect(r.debugPainted, isNotNull);
+      expect((r.debugPainted!.left - real.left).abs(), lessThan(1), reason: 'drawn at ${r.debugPainted}, is at $real');
+    }
+  });
 }

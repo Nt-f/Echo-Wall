@@ -127,7 +127,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   Map<String, Spot>? startSpots;                // every widget of that group where it was when the drag began
   Spot? dragFrom, dragAt;                       // where the dragged one came from, where it is now
   Timer? _edgeFlip;                             // held at the screen's edge: the next page
-  late final AnimationController wobble = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
+  late final AnimationController wobble;       // made in initState: lazily, a dispose() without editing made it then
 
   final photos = PhotoLibrary();
   final backdrop = Backdrop();
@@ -157,6 +157,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    wobble = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
     const MethodChannel('hassmic/keys').invokeMethod<String>('prop', 'debug.hassmic.ambient').then((v) {
       final n = int.tryParse(v ?? '');
       if (n != null && n > 0) ambientOverride = n;
@@ -170,7 +171,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   }
 
   @override
-  void dispose() { idle?.cancel(); _wallTimer?.cancel(); wobble.dispose(); pc.dispose(); backdrop.dispose(); super.dispose(); }
+  void dispose() { idle?.cancel(); _wallTimer?.cancel(); _edgeFlip?.cancel(); wobble.dispose(); pc.dispose(); backdrop.dispose(); super.dispose(); }
 
   void edit(bool on) {
     setState(() { editing = on; ambient = false; });

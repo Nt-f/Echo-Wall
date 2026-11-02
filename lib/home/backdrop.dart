@@ -11,6 +11,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 
 class Backdrop extends ChangeNotifier {
   ui.Image? sharp, blurred;
@@ -152,6 +153,42 @@ class RenderFrosted extends RenderProxyBox {
   set edgeTop(Color v) { if (v != _edgeTop) { _edgeTop = v; markNeedsPaint(); } }
   set edgeBottom(Color v) { if (v != _edgeBottom) { _edgeBottom = v; markNeedsPaint(); } }
 
+  /// where on the screen it drew its piece from, the last time it painted
+  Rect? _paintedAt;
+  @visibleForTesting
+  Rect? get debugPainted => _paintedAt;
+
+  // The glass's piece of the backdrop depends on where it is on the screen, which can change without this being
+  // painted again: a layer an ancestor keeps (a RepaintBoundary, an Opacity between 0 and 1: an unavailable device's
+  // tile) is moved as a whole by a swipe, and what is inside it keeps the piece of where it was first painted (a page
+  // painted off to the side: clear glass).  So after every frame each glass checks where it is now, and paints again
+  // where it moved (one frame late: inside such a layer only; elsewhere its parent paints it again in the same frame).
+  static final _live = <RenderFrosted>{};
+  static bool _watching = false;
+  static void _check(Duration _) {
+    for (final r in _live) {
+      if (!r.attached || !r.hasSize || r._paintedAt == null) continue;
+      final now = MatrixUtils.transformRect(r.getTransformTo(null), Offset.zero & r.size);
+      if ((now.left - r._paintedAt!.left).abs() > .5 || (now.top - r._paintedAt!.top).abs() > .5 ||
+          (now.width - r._paintedAt!.width).abs() > .5) {
+        r.markNeedsPaint();
+      }
+    }
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _live.add(this);
+    if (!_watching) { _watching = true; SchedulerBinding.instance.addPersistentFrameCallback(_check); }
+  }
+
+  @override
+  void detach() {
+    _live.remove(this);
+    super.detach();
+  }
+
   @override
   bool get alwaysNeedsCompositing => false;
 
@@ -162,9 +199,10 @@ class RenderFrosted extends RenderProxyBox {
     canvas.save();
     canvas.clipRSuperellipse(shape);
     final img = _blurred;
+    // where this card is on the screen now (transforms included: a press, a wobble, a flight)
+    final onScreen = MatrixUtils.transformRect(getTransformTo(null), Offset.zero & size);
+    _paintedAt = onScreen;
     if (img != null && !_screen.isEmpty && attached) {
-      // where this card is on the screen now (transforms included: a press, a wobble, a flight)
-      final onScreen = MatrixUtils.transformRect(getTransformTo(null), Offset.zero & size);
       final k = img.width / _screen.width;
       final src = Rect.fromLTWH(onScreen.left * k, onScreen.top * k, onScreen.width * k, onScreen.height * k);
       canvas.drawImageRect(img, src, box, Paint()..filterQuality = FilterQuality.low);
