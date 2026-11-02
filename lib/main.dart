@@ -13,6 +13,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'hassmic.dart';
+import 'echo_ui.dart';
 import 'keyboard.dart';
 
 void main() {
@@ -41,6 +42,8 @@ document.addEventListener('focusout',function(){setTimeout(tell,60)},true);tell(
 
 class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   final hassmic = Hassmic();
+  final feed = EchoStateFeed();
+  EchoState echo = const EchoState();
   ScreenConfig? cfg;
   bool reached = false, front = true;
   WebViewController? web;
@@ -63,12 +66,14 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
       if (mounted && r == true) setState(() => round = true);
     }).catchError((_) {});
     _schedule(Duration.zero);
+    feed.start((s) { if (mounted) setState(() => echo = s); });      // the words, a ring, the clock's next alarm
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     poller?.cancel();
+    feed.stop();
     super.dispose();
   }
 
@@ -113,6 +118,9 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   }
 
   static String _urls(ScreenConfig c) => c.screens.map((s) => s.url).join('\n');
+
+  /// the screen shown is one this app draws (hassmic:clock), not a page
+  bool ownScreen(ScreenConfig c) => current >= 0 && current < c.screens.length && c.screens[current].url == 'hassmic:clock';
 
   // ---------------------------------------------------------------- the WebView
 
@@ -159,6 +167,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     setState(() { current = i; bar = false; typing = false; });
     touched = DateTime.now();
     final url = c.screens[i].url, hao = _origin(c.ha);
+    if (url.startsWith('hassmic:')) return;     // drawn here (build), nothing to load
     if (c.token.isNotEmpty && hao.isNotEmpty && _origin(url) == hao && injectedFor != hao) {
       // the login: the token into Home Assistant's origin as its frontend keeps its own, before its first page
       injectedFor = hao;
@@ -188,17 +197,26 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     } else {
       body = Column(children: [
         Expanded(child: Stack(children: [
+          // a screen of hassmic's this app draws, else the page; the WebView stays (its page kept) under the clock
           WebViewWidget(controller: w),
+          if (ownScreen(c)) Positioned.fill(child: ClockScreen(s: echo, round: round)),
           _handle(),
           if (bar) _switcher(c),
         ])),
-        if (typing && ownKeyboard)
+        if (typing && ownKeyboard && !ownScreen(c))
           Keyboard(
             round: round,
             numbers: numbers,
             fallback: (s) => w.runJavaScript('document.execCommand("insertText",false,${jsonEncode(s)})'),
             onHide: () => setState(() => typing = false),
           ),
+      ]);
+    }
+    // over everything: a ring, then a request's words (hassmic leaves the screen to this app for them: front/draws)
+    if (reached && c != null && c.enabled) {
+      body = Stack(children: [
+        body,
+        if (echo.ringing.isNotEmpty) RingOverlay(s: echo, round: round) else if (echo.words) WordsOverlay(s: echo, round: round),
       ]);
     }
     return Scaffold(

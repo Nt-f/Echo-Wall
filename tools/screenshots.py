@@ -94,11 +94,22 @@ async def ha_token():
 class Hassmic:
     def __init__(self):
         self.cfg = {}
+        self.state, self.changed = {"v": 1, "running": False, "words": False, "heard": "", "reply": "", "ringing": "",
+                                    "ringing_alarm": False, "h24": False, "clock_set": True,
+                                    "next_alarm": {"at": int(time.time()) + 50000, "text": "Alarm 7:30 AM on weekdays", "label": "Gym"},
+                                    "display": "always"}, threading.Condition()
         me = self
 
         class H(BaseHTTPRequestHandler):
             def do_GET(self):
-                b = json.dumps(me.cfg).encode()
+                if self.path.startswith("/kiosk/state"):
+                    # the long poll: /kiosk/state/<v> waits until the version is another (as hassmic's)
+                    want = self.path[len("/kiosk/state/"):] if self.path.startswith("/kiosk/state/") else ""
+                    with me.changed:
+                        if want.isdigit(): me.changed.wait_for(lambda: me.state["v"] != int(want), timeout=25)
+                        b = json.dumps(me.state).encode()
+                else:
+                    b = json.dumps(me.cfg).encode()
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(b)))
                 self.end_headers(); self.wfile.write(b)
 
@@ -106,12 +117,18 @@ class Hassmic:
         self.srv = ThreadingHTTPServer(("127.0.0.1", HASSMIC_PORT), H)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
 
-    def screens(self, token, first):
+    def set_state(self, **kw):
+        with self.changed:
+            self.state = {**self.state, **kw, "v": self.state["v"] + 1}
+            self.changed.notify_all()
+
+    def screens(self, token, first, clock=False):
         base = f"http://127.0.0.1:{HA_PORT}"
         s = [{"name": "Home Assistant", "url": f"{base}/lovelace/0"}, {"name": "Map", "url": f"{base}/map"},
              # another origin of the same Home Assistant: no token there, its sign-in page (the keyboard's shot)
              {"name": "Sign in", "url": f"http://localhost:{HA_PORT}/"}]
         s = s[first:] + s[:first]
+        if clock: s = [{"name": "Clock", "url": "hassmic:clock"}] + s
         self.cfg = {"enabled": True, "ha": base, "has_token": True, "token": token, "app": PKG, "default": 0, "return": 0, "screens": s}
 
 
@@ -217,6 +234,18 @@ def main():
                 adb("shell", "input", "tap", str(int(at[0])), str(int(at[1])))
                 time.sleep(2)
             shot(os.path.join(out, f"{mid}-keyboard.png"), round_)
+            # hassmic's own pictures, drawn by the app (docs/screen-apps.md): the clock, a request, an alarm ringing
+            hm.screens(token, 0, clock=True)
+            time.sleep(4)
+            shot(os.path.join(out, f"{mid}-clock.png"), round_)
+            hm.set_state(running=True, words=True, heard="turn on the kitchen lights and dim the living room",
+                         reply="Turned on the kitchen lights and set the living room to 30 percent.")
+            time.sleep(2)
+            shot(os.path.join(out, f"{mid}-request.png"), round_)
+            hm.set_state(running=False, words=False, heard="", reply="", ringing="Alarm 7:30 AM", ringing_alarm=True)
+            time.sleep(2)
+            shot(os.path.join(out, f"{mid}-alarm.png"), round_)
+            hm.set_state(ringing="", ringing_alarm=False)
     except Exception:
         print(open(os.path.join(tmp, "ha.log"), errors="replace").read()[-3000:], file=sys.stderr)
         raise

@@ -11,4 +11,20 @@ void main() {
     expect(c.defaultScreen, 0);          // out of range: the first
     expect(c.returnSeconds, 120);
   });
+
+  test('screens of hassmic\'s own: the clock kept, others left out, the start screen found again', () {
+    final c = ScreenConfig.parse('{"enabled":true,"default":2,"screens":[{"name":"Weather","url":"hassmic:weather"},'
+        '{"name":"Clock","url":"hassmic:clock"},{"name":"HA","url":"http://ha:8123/"}]}');
+    expect(c.screens.map((s) => s.name), ['Clock', 'HA']);
+    expect(c.defaultScreen, 1);
+  });
+
+  test('the state hassmic hands the app that draws', () {
+    final s = EchoState.parse('{"v":3,"running":true,"words":true,"heard":"hi","reply":"","ringing":"","h24":true,'
+        '"clock_set":true,"next_alarm":{"at":1793689800,"text":"Alarm 7:30","label":"Gym"},"display":"always"}');
+    expect(s.v, 3);
+    expect(s.words, true);
+    expect(s.nextAlarm, isNotNull);
+    expect(s.nextAlarmLabel, 'Gym');
+  });
 }

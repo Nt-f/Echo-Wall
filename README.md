@@ -13,6 +13,9 @@ works and make it yours:
 - an on-screen keyboard (the Echo has no input method): it comes up when a text field in the page has the focus and
   types with real key events (`MainActivity.kt`); on a device with a keyboard of its own, that one comes instead
 - round screens (Echo Spot): the switcher and the keyboard kept inside the circle
+- hassmic's own pictures in the app's look (it polls `/front/draws`, so hassmic leaves the screen to it): the clock as
+  a screen ("Clock" in the integration's options), a request's words, an alarm or timer ringing, from hassmic's state
+  feed (`/kiosk/state`, a long poll: words appear as hassmic has them); taps on a ring still reach hassmic
 
 The contract with hassmic (how the app is started, where its config comes from, what it tells hassmic) is in
 echo-dot-assist's [docs/screen-apps.md](https://github.com/Nt-f/echo-dot-assist/blob/main/docs/screen-apps.md);
@@ -38,6 +41,21 @@ with a clock have LED segments, no screen for this.
 | Echo Show (1st gen) | 1024 × 600 | 160 (estimated) | <img src="docs/screenshots/show1-dashboard.png" width="220"> | <img src="docs/screenshots/show1-switcher.png" width="220"> | <img src="docs/screenshots/show1-keyboard.png" width="220"> |
 | Echo Spot (1st gen), round | 480 × 480 | 240 (estimated) | <img src="docs/screenshots/spot-dashboard.png" width="220"> | <img src="docs/screenshots/spot-switcher.png" width="220"> | <img src="docs/screenshots/spot-keyboard.png" width="220"> |
 | Echo Spot (2024) | 320 × 240 | 120 (estimated) | <img src="docs/screenshots/spot2024-dashboard.png" width="220"> | <img src="docs/screenshots/spot2024-switcher.png" width="220"> | <img src="docs/screenshots/spot2024-keyboard.png" width="220"> |
+
+And what hassmic would otherwise draw over the app, drawn by it (the `hassmic:clock` screen, a request's words,
+an alarm ringing; `/kiosk/state`):
+
+| Model | Clock | Request | Alarm |
+|---|---|---|---|
+| Echo Show 5 | <img src="docs/screenshots/show5-clock.png" width="220"> | <img src="docs/screenshots/show5-request.png" width="220"> | <img src="docs/screenshots/show5-alarm.png" width="220"> |
+| Echo Show 8 / 10 / Hub | <img src="docs/screenshots/show8-clock.png" width="220"> | <img src="docs/screenshots/show8-request.png" width="220"> | <img src="docs/screenshots/show8-alarm.png" width="220"> |
+| Echo Show 8 (2025) | <img src="docs/screenshots/show8-2025-clock.png" width="220"> | <img src="docs/screenshots/show8-2025-request.png" width="220"> | <img src="docs/screenshots/show8-2025-alarm.png" width="220"> |
+| Echo Show 11 | <img src="docs/screenshots/show11-clock.png" width="220"> | <img src="docs/screenshots/show11-request.png" width="220"> | <img src="docs/screenshots/show11-alarm.png" width="220"> |
+| Echo Show 15 / 21 | <img src="docs/screenshots/show15-clock.png" width="220"> | <img src="docs/screenshots/show15-request.png" width="220"> | <img src="docs/screenshots/show15-alarm.png" width="220"> |
+| Echo Show 15, upright | <img src="docs/screenshots/show15-portrait-clock.png" width="220"> | <img src="docs/screenshots/show15-portrait-request.png" width="220"> | <img src="docs/screenshots/show15-portrait-alarm.png" width="220"> |
+| Echo Show (1st gen) | <img src="docs/screenshots/show1-clock.png" width="220"> | <img src="docs/screenshots/show1-request.png" width="220"> | <img src="docs/screenshots/show1-alarm.png" width="220"> |
+| Echo Spot (1st gen) | <img src="docs/screenshots/spot-clock.png" width="220"> | <img src="docs/screenshots/spot-request.png" width="220"> | <img src="docs/screenshots/spot-alarm.png" width="220"> |
+| Echo Spot (2024) | <img src="docs/screenshots/spot2024-clock.png" width="220"> | <img src="docs/screenshots/spot2024-request.png" width="220"> | <img src="docs/screenshots/spot2024-alarm.png" width="220"> |
 
 Again: `flutter build apk --release --target-platform android-x64`, start an emulator, then
 `python3 tools/screenshots.py --serial emulator-5554` (its header says what it needs).
