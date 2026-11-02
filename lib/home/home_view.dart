@@ -41,36 +41,63 @@ class PageSpec {
   final String name, sub;
   final String? area;                           // null: Home
   final List<(Item, int col, int row)> placed;
-  const PageSpec(this.name, this.sub, this.area, this.placed);
+  final int index;                              // which of its group's pages (the positions' page number)
+  const PageSpec(this.name, this.sub, this.area, this.placed, {this.index = 0});
 }
 
-/// items into pages: each at the first free place it fits, on the first page with room for it (a big one that does not
-/// fit where it comes leaves its gap to the small ones after it), else on a new page
-List<PageSpec> pack(String name, String sub, String? area, List<Item> items, int cols, int rows) {
+/// where a widget was put: page, column, row
+typedef Spot = (int page, int col, int row);
+
+/// items into pages.  Those with a spot of their own (`fixed`: where they were put) go there first, `first` (the one
+/// being dragged) before all; one whose spot is taken goes to `swapTo` (where the dragged one came from: the two swap)
+/// if it fits there; the rest each at the first free place it fits, on the first page with room for it (a big one that
+/// does not fit where it comes leaves its gap to the small ones after it), else on a new page.  `extra`: an empty page
+/// after the last (to drag a widget onto).  Every page up to the last one used is returned, empty ones included.
+List<PageSpec> pack(String name, String sub, String? area, List<Item> items, int cols, int rows,
+    {Map<String, Spot> fixed = const {}, String? first, Spot? swapTo, bool extra = false}) {
   final grids = <List<List<bool>>>[], placed = <List<(Item, int, int)>>[];
-  bool fits(List<List<bool>> g, Item it, int c, int r) {
-    if (c + it.w > cols || r + it.h > rows) return false;
+  void page(int pi) { while (grids.length <= pi) { grids.add(List.generate(rows, (_) => List.filled(cols, false))); placed.add([]); } }
+  bool fits(Item it, int pi, int c, int r) {
+    if (pi < 0 || c < 0 || r < 0 || c + it.w > cols || r + it.h > rows) return false;
+    page(pi);
+    final g = grids[pi];
     for (var y = r; y < r + it.h; y++) { for (var x = c; x < c + it.w; x++) { if (g[y][x]) return false; } }
     return true;
   }
-  for (final it in items) {
-    if (it.w > cols || it.h > rows) continue;   // bigger than a page: left out
-    var done = false;
-    for (var pi = 0; pi <= grids.length && !done; pi++) {
-      if (pi == grids.length) { grids.add(List.generate(rows, (_) => List.filled(cols, false))); placed.add([]); }
-      final g = grids[pi];
-      for (var r = 0; r < rows && !done; r++) {
-        for (var c = 0; c < cols && !done; c++) {
-          if (!fits(g, it, c, r)) continue;
-          for (var y = r; y < r + it.h; y++) { for (var x = c; x < c + it.w; x++) { g[y][x] = true; } }
-          placed[pi].add((it, c, r));
-          done = true;
+  void put(Item it, int pi, int c, int r) {
+    for (var y = r; y < r + it.h; y++) { for (var x = c; x < c + it.w; x++) { grids[pi][y][x] = true; } }
+    placed[pi].add((it, c, r));
+  }
+  bool at(Item it, Spot? s) {
+    if (s == null || !fits(it, s.$1, s.$2, s.$3)) return false;
+    put(it, s.$1, s.$2, s.$3);
+    return true;
+  }
+  final fitting = items.where((it) => it.w <= cols && it.h <= rows).toList();   // bigger than a page: left out
+  final done = <String>{};
+  // the dragged one where the finger is, then those that were put somewhere
+  for (final it in [...fitting.where((it) => it.key == first), ...fitting.where((it) => it.key != first)]) {
+    if (fixed.containsKey(it.key) && at(it, fixed[it.key])) done.add(it.key);
+  }
+  var swapped = false;
+  for (final it in fitting) {
+    if (done.contains(it.key)) continue;
+    if (fixed.containsKey(it.key) && !swapped && swapTo != null && at(it, swapTo)) { swapped = true; done.add(it.key); continue; }
+    var ok = false;
+    for (var pi = 0; !ok; pi++) {
+      page(pi);
+      for (var r = 0; r < rows && !ok; r++) {
+        for (var c = 0; c < cols && !ok; c++) {
+          if (fits(it, pi, c, r)) { put(it, pi, c, r); ok = true; }
         }
       }
     }
   }
-  if (placed.isEmpty) return [PageSpec(name, sub, area, const [])];
-  return [for (final pl in placed) PageSpec(name, sub, area, pl)];
+  var last = placed.lastIndexWhere((pl) => pl.isNotEmpty);
+  if (extra) last++;
+  if (last < 0) return [PageSpec(name, sub, area, const [])];
+  page(last);
+  return [for (var i = 0; i <= last; i++) PageSpec(name, sub, area, placed[i], index: i)];
 }
 
 class HomeView extends StatefulWidget {
@@ -96,7 +123,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   DateTime touched = DateTime.now();
   Timer? idle;
   String? dragging;                             // the key of the widget being moved
-  List<String>? liveOrder;                      // the page's keys while one is moved
+  String? liveArea;                             // its page group (_gk)
+  Map<String, Spot>? startSpots;                // every widget of that group where it was when the drag began
+  Spot? dragFrom, dragAt;                       // where the dragged one came from, where it is now
+  Timer? _edgeFlip;                             // held at the screen's edge: the next page
   late final AnimationController wobble = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
 
   final photos = PhotoLibrary();
@@ -169,6 +199,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
 
   List<PageSpec> pages(int cols, int rows) {
     final out = <PageSpec>[];
+    _items.clear();
     final home = <Item>[
       if (lay.analogClock) const Item(Kind.analog),
       if (lay.digitalClock) const Item(Kind.digital),
@@ -186,8 +217,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       int at(Item it) { final i = ho.indexOf(it.key); return i < 0 ? (1 << 20) + idx[it.key]! : i; }
       home.sort((a, b) => at(a).compareTo(at(b)));
     }
-    _keysOf[_gk(null)] = [for (final it in home) it.key];
-    out.addAll(pack('Home', '', null, _live(null, home), cols, rows));
+    out.addAll(_pack('Home', '', null, home, cols, rows));
 
     final byArea = <String, List<String>>{};
     for (final id in ha.states.keys) {
@@ -205,19 +235,25 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         final k = kind(a).compareTo(kind(b));
         return k != 0 ? k : nameIn(ha, a, name).compareTo(nameIn(ha, b, name));
       });
-      _keysOf[_gk(area)] = ids;
-      out.addAll(pack(name, roomSummary(ha, area), area, _live(area, ids.map((id) => itemOf(id)).toList()), cols, rows));
+      out.addAll(_pack(name, roomSummary(ha, area), area, ids.map((id) => itemOf(id)).toList(), cols, rows));
     }
     return out;
   }
 
-  /// while a widget is dragged across this page: the order the drag has made so far
-  String? liveArea;
-  List<Item> _live(String? area, List<Item> items) {
-    if (liveOrder == null || liveArea != _gk(area)) return items;
-    final by = {for (final it in items) it.key: it};
-    return [for (final k in liveOrder!) ?by[k], ...items.where((it) => !liveOrder!.contains(it.key))];
+  /// a page group packed: each widget where it was put (the layout's places), the one being dragged where the finger
+  /// has it; what was where it goes to where it came from; the rest flows into free places.  Where everything ended up
+  /// is kept (_spotsOf): a drag starts from it, a drop saves it
+  List<PageSpec> _pack(String name, String sub, String? area, List<Item> items, int cols, int rows) {
+    final g = _gk(area), live = dragging != null && liveArea == g;
+    final saved = {for (final e in (lay.place[g] ?? const <String, List<int>>{}).entries) if (e.value.length == 3) e.key: (e.value[0], e.value[1], e.value[2])};
+    final fixed = live ? {...startSpots!, dragging!: ?dragAt} : saved;
+    final ps = pack(name, sub, area, items, cols, rows, fixed: fixed, first: live ? dragging : null,
+        swapTo: live && dragAt != null ? dragFrom : null, extra: live);
+    _spotsOf[g] = {for (final pg in ps) for (final (it, c, r) in pg.placed) it.key: (pg.index, c, r)};
+    for (final it in items) { _items[it.key] = it; }
+    return ps;
   }
+  final _spotsOf = <String, Map<String, Spot>>{};
 
   // ---------------------------------------------------------------- drawing
 
@@ -230,6 +266,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       if (_wallFor != lay.wallpaper) { _wallFor = lay.wallpaper; WidgetsBinding.instance.addPostFrameCallback((_) => _wallpaper()); }
       return Listener(
       onPointerDown: (_) => touched = DateTime.now(),
+      // a finger lifted ends a drag here too: when the page turned under it, the widget's old page (and its
+      // Draggable) may be gone and the page now under it not yet entered, and neither would tell of the drop
+      onPointerUp: (_) => _drop(),
+      onPointerCancel: (_) => _drop(),
       child: Stack(children: [
         Positioned.fill(child: LayoutBuilder(builder: (context, box) {
           final sz = Size(box.maxWidth, box.maxHeight);
@@ -255,14 +295,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               physics: editing ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(parent: PageScrollPhysics()),
               itemCount: ps.length,
               onPageChanged: (i) => setState(() => page = i),
-              itemBuilder: (context, i) => Padding(
+              itemBuilder: (context, i) => _grid(ps, i, cols, rows, cw + gap, cell + gap, Padding(
                 padding: EdgeInsets.fromLTRB(pad, pad + (editing ? 44 : 0), pad, bottom),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   SizedBox(height: header, child: _header(ps[i], p, small)),
-                  Expanded(child: _grid(ps[i], [
-                  for (final (it, c, r) in ps[i].placed)
-                    (it.key, Rect.fromLTWH(c * (cw + gap), r * (cell + gap), it.w * cw + (it.w - 1) * gap, it.h * cell + (it.h - 1) * gap)),
-                  ], Stack(children: [
+                  Expanded(child: _GridBox(onBox: (b) => _gridBox['${_gk(ps[i].area)}/${ps[i].index}'] = b, child: Stack(children: [
                   for (final (it, c, r) in ps[i].placed)
                     AnimatedPositioned(
                       key: ValueKey('${ps[i].area}/${it.key}'),
@@ -273,7 +310,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                     ),
                   ]))),
                 ]),
-              ),
+              )),
             ),
             if (ps.isNotEmpty) _dots(ps, p),
             if (editing) _bar(ps, p),
@@ -360,7 +397,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       builder: (_, child) => Transform.rotate(angle: (wobble.value - .5) * .024 * (it.key.hashCode.isEven ? 1 : -1), child: child),
       child: AbsorbPointer(child: w),           // nothing of the widget's own while editing
     );
-    if (id == null && it.kind != Kind.analog && it.kind != Kind.digital) return body;
     Widget badge(String s, Color bg, Color fg, VoidCallback f, {required bool left}) => Positioned(
           left: left ? 4 : null, right: left ? null : 4, top: 4,
           child: GestureDetector(onTap: f, child: Container(width: 30, height: 30, alignment: Alignment.center,
@@ -369,6 +405,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         );
     final key = it.key;
     final draggable = LayoutBuilder(builder: (context, box) => Draggable<String>(
+      key: _dragKeys.putIfAbsent('${_gk(page.area)}/$key', GlobalKey.new),   // kept when it moves to another page
       data: key,
       // the finger at the tile's middle, the tile at its own size, lifted
       dragAnchorStrategy: (d, context, position) => Offset(box.maxWidth / 2, box.maxHeight / 2),
@@ -378,9 +415,14 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       onDragStarted: () {
         HapticFeedback.selectionClick();
         _dragHalf[key] = Offset(box.maxWidth / 2, box.maxHeight / 2);
-        setState(() { dragging = key; liveArea = _gk(page.area); _lastHit = null; liveOrder = _keys(page.area); });
+        final g = _gk(page.area);
+        setState(() {
+          dragging = key; liveArea = g;
+          startSpots = Map.of(_spotsOf[g] ?? const {});
+          dragFrom = startSpots![key]; dragAt = dragFrom;
+        });
       },
-      onDragEnd: (_) => _drop(page),
+      onDragEnd: (_) => _drop(),
       child: body,
     ));
     return Builder(
@@ -402,52 +444,56 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     );
   }
 
-  /// a page's widgets as a drop target: the one under the finger (well inside it, not near its edge) gives its place
-  /// to the dragged one.  One target per page, not per widget: a widget that moves away under the finger and another
-  /// that moves in made a per-widget target swap the two back and forth; and a big widget dropped among small ones
-  /// moves them, so a swap waits until the finger has left the widget it was made on (_lastHit)
-  String? _lastHit;
-  Widget _grid(PageSpec page, List<(String, Rect)> slots, Widget child) {
-    final area = _gk(page.area);
+  /// a page as a drop target: the dragged widget goes to the cell its top-left corner is nearest to (anywhere, a
+  /// gap too), and stays there; a widget that was there takes the dragged one's old place.  Held at the screen's
+  /// left or right edge, the page turns (an empty one waits after the last).  One target per page, not one per
+  /// widget: widgets moving under the finger made per-widget targets swap back and forth
+  Widget _grid(List<PageSpec> ps, int i, int cols, int rows, double stepX, double stepY, Widget child) {
+    final page = ps[i], g = _gk(page.area);
     return DragTarget<String>(
-      onWillAcceptWithDetails: (d) => liveOrder != null && liveArea == area && slots.any((s) => s.$1 == d.data),
+      // by the group's widgets, not by `dragging`: a drag enters the page before onDragStarted has run
+      onWillAcceptWithDetails: (d) => _spotsOf[g]?.containsKey(d.data) ?? false,
       onMove: (d) {
-        final o = liveOrder, grid = _gridBox[area];
-        if (o == null || liveArea != area || grid == null || !grid.attached) return;
-        final at = grid.globalToLocal(d.offset + (_dragHalf[d.data] ?? Offset.zero));
-        final hit = slots.where((s) => s.$1 != d.data && s.$2.deflate(min(s.$2.width, s.$2.height) * .22).contains(at)).firstOrNull;
-        if (hit == null) {
-          if (_lastHit != null && !slots.any((s) => s.$1 == _lastHit && s.$2.contains(at))) _lastHit = null;
-          return;
-        }
-        if (hit.$1 == _lastHit) return;
-        _lastHit = hit.$1;
-        setState(() { o.remove(d.data); final i = o.indexOf(hit.$1); o.insert(i < 0 ? o.length : i, d.data); });
+        final box = _gridBox['$g/${page.index}'], it = _itemOf(d.data);
+        if (dragging != d.data || liveArea != g || box == null || !box.attached || it == null) return;
+        final topLeft = box.globalToLocal(d.offset);
+        final c = (topLeft.dx / stepX).round().clamp(0, max(0, cols - it.w)).toInt(), r = (topLeft.dy / stepY).round().clamp(0, max(0, rows - it.h)).toInt();
+        final to = (page.index, c, r);
+        if (to != dragAt) setState(() => dragAt = to);
+        // the edges: the page before or after, once held there a moment
+        final finger = d.offset + (_dragHalf[d.data] ?? Offset.zero), w = MediaQuery.sizeOf(context).width;
+        final dir = finger.dx < 28 ? -1 : finger.dx > w - 28 ? 1 : 0;
+        if (dir == 0) { _edgeFlip?.cancel(); _edgeFlip = null; return; }
+        _edgeFlip ??= Timer(const Duration(milliseconds: 600), () {
+          _edgeFlip = null;
+          final to = this.page + dir;
+          // within the widget's own group (Home's pages, or its room's): a room's widget does not go to Home
+          if (dragging != null && to >= 0 && to < ps.length && _gk(ps[to].area) == g) {
+            pc.animateToPage(to, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          }
+        });
       },
-      builder: (context, _, _) => _GridBox(onBox: (b) => _gridBox[area] = b, child: child),
+      onAcceptWithDetails: (_) => _drop(),
+      builder: (context, _, _) => child,
     );
   }
   final _gridBox = <String, RenderBox>{};
-  // each page group's widgets in order (all its pages), the last pages() made: '' Home, '\0<area>' a room
-  final _keysOf = <String, List<String>>{};
-  List<String> _keys(String? area) => [...?_keysOf[_gk(area)]];
-  /// a page group's key: Home's is not the room without an area's ('')
-  static String _gk(String? area) => area == null ? '' : '\u0000$area';
+  final _dragKeys = <String, GlobalKey>{};
+  final _items = <String, Item>{};              // the dragged one's item (its size), from the last pages()
+  Item? _itemOf(String key) => _items[key];
+  /// a page group's key, as the layout keeps places: Home's is not the room without an area's
+  static String _gk(String? area) => area == null ? 'home' : 'area:$area';
   final _dragHalf = <String, Offset>{};
 
-  void _drop(PageSpec page) {
-    final o = liveOrder;
-    setState(() { dragging = null; liveOrder = null; liveArea = null; _lastHit = null; });
-    if (o == null) return;
-    if (page.area == null) {
-      // Home: every widget's place (the clocks, the date, the screens too), the devices on it in that order
-      lay.homeOrder = o;
-      final fav = favorites();
-      lay.favorites = [...lay.homeOrder.where(fav.contains), ...fav.where((x) => !lay.homeOrder.contains(x))];
-    } else {
-      final ids = o.where((k) => ha.states.containsKey(k)).toList();
-      lay.order = {...lay.order, page.area!: ids};
-    }
+  /// the drop: every widget of the group where it is now, kept (empty pages between taken out)
+  void _drop() {
+    final g = liveArea;
+    if (dragging == null || g == null) return;
+    final spots = _spotsOf[g] ?? const {};
+    final used = (spots.values.map((s) => s.$1).toSet().toList()..sort());
+    lay.place = {...lay.place, g: {for (final e in spots.entries) e.key: [used.indexOf(e.value.$1), e.value.$2, e.value.$3]}};
+    _edgeFlip?.cancel(); _edgeFlip = null;
+    setState(() { dragging = null; liveArea = null; startSpots = null; dragFrom = null; dragAt = null; });
     lay.changed();
   }
 

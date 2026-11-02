@@ -15,6 +15,8 @@ class Layout extends ChangeNotifier {
   Set<String> hidden = {};
   Map<String, List<String>> order = {};        // area id: its tiles first in this order
   List<String> homeOrder = [];                  // Home's widgets by key (clocks, date, screens, devices), as moved
+  /// where each widget was put, per page group (`home`, `area:<area id>`): key -> [page, column, row]
+  Map<String, Map<String, List<int>>> place = {};
   int ambientSeconds = 120;                     // 0: never
   bool analogClock = true, digitalClock = true;
   File? _file;
@@ -35,12 +37,16 @@ class Layout extends ChangeNotifier {
     hidden = {...(j['hidden'] as List? ?? const []).cast<String>()};
     order = {for (final e in (j['order'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as List).cast<String>()};
     homeOrder = (j['home_order'] as List? ?? const []).cast<String>();
+    place = {
+      for (final g in (j['place'] as Map<String, dynamic>? ?? const {}).entries)
+        g.key: {for (final e in (g.value as Map<String, dynamic>).entries) e.key: (e.value as List).cast<num>().map((n) => n.toInt()).toList()}
+    };
     ambientSeconds = (j['ambient'] as num? ?? 120).toInt();
     analogClock = j['analog_clock'] != false;
     digitalClock = j['digital_clock'] != false;
   }
 
-  Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order, 'home_order': homeOrder,
+  Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order, 'home_order': homeOrder, 'place': place,
       'ambient': ambientSeconds, 'analog_clock': analogClock, 'digital_clock': digitalClock};
 
   void changed() {
@@ -50,7 +56,7 @@ class Layout extends ChangeNotifier {
   }
 
   void reset() {
-    favorites = null; hidden = {}; order = {}; homeOrder = [];
+    favorites = null; hidden = {}; order = {}; homeOrder = []; place = {};
     changed();
   }
 }

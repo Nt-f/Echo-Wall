@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../echo_ui.dart' show clockText, ampm;
@@ -114,14 +115,22 @@ class _LockScreenState extends State<LockScreen> with TickerProviderStateMixin {
                       Text(widget.nextAlarm, style: TextStyle(color: fg.withValues(alpha: .85), fontSize: 4.6 * u, shadows: shadow)),
                   ])),
                 ),
-                // how to open it: a chevron that rises on a tap
-                Positioned(left: 0, right: 0, bottom: 6, child: AnimatedBuilder(animation: hint, builder: (_, _) {
+                // how to open it, always there: a chevron over the words on a capsule of dark glass (white text alone
+                // went under in a bright sky or snow), sized with the screen; a tap lifts it once
+                Positioned(left: 0, right: 0, bottom: 3.2 * u, child: AnimatedBuilder(animation: hint, builder: (_, _) {
                   final t = sin(hint.value * pi);
-                  return Transform.translate(offset: Offset(0, -12 * t), child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.keyboard_arrow_up, color: Colors.white.withValues(alpha: .55 + .4 * t), size: 26),
-                    if (t > .05) Opacity(opacity: t, child: const Text('Swipe up to open',
-                        style: TextStyle(color: Colors.white, fontSize: 13, shadows: [Shadow(blurRadius: 8)]))),
-                  ]));
+                  return Transform.translate(offset: Offset(0, -3 * u * t), child: Center(child: Container(
+                    padding: EdgeInsets.fromLTRB(4.4 * u, 1.4 * u, 4.4 * u, 1.8 * u),
+                    decoration: ShapeDecoration(color: Color.fromRGBO(0, 0, 0, .42 + .14 * t),
+                        shape: const StadiumBorder(side: BorderSide(color: Color(0x33ffffff), width: 1)),
+                        shadows: const [BoxShadow(color: Color(0x40000000), blurRadius: 16, offset: Offset(0, 4))]),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(CupertinoIcons.chevron_up, color: Colors.white, size: 4.4 * u),
+                      SizedBox(width: 1.6 * u),
+                      Text('Swipe up to open', style: TextStyle(color: Colors.white, fontSize: 4.4 * u, fontWeight: FontWeight.w600,
+                          letterSpacing: -.1)),
+                    ]),
+                  )));
                 })),
                 if (p != null && p.credit.isNotEmpty)
                   Positioned(right: 10, bottom: 6, child: Text(p.credit,
