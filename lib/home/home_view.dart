@@ -111,7 +111,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       photos.configure(widget.settings);
       try {
         final ph = await photos.next(wide: backdrop.size.isEmpty || backdrop.size.width >= backdrop.size.height);
-        await backdrop.photo(ph.bytes);
+        if (lay.wallpaper == Wallpaper.photo) await backdrop.photo(ph.bytes);   // a gradient picked meanwhile wins
       } catch (_) {}
       _wallTimer = Timer(const Duration(hours: 2), _wallpaper);
     } else {
@@ -214,9 +214,12 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final p = Palette.of(lay.wallpaper);
-    if (_wallFor != lay.wallpaper) WidgetsBinding.instance.addPostFrameCallback((_) => _wallpaper());
-    return BackdropScope(backdrop: backdrop, child: ListenableBuilder(listenable: Listenable.merge([ha, lay]), builder: (context, _) => Listener(
+    // the palette and the wallpaper inside the layout's builder: a theme picked in edit mode shows at once (in build()
+    // above it they changed only once the HomeView itself was built again, at Done)
+    return BackdropScope(backdrop: backdrop, child: ListenableBuilder(listenable: Listenable.merge([ha, lay]), builder: (context, _) {
+      final p = Palette.of(lay.wallpaper);
+      if (_wallFor != lay.wallpaper) { _wallFor = lay.wallpaper; WidgetsBinding.instance.addPostFrameCallback((_) => _wallpaper()); }
+      return Listener(
       onPointerDown: (_) => touched = DateTime.now(),
       child: Stack(children: [
         Positioned.fill(child: LayoutBuilder(builder: (context, box) {
@@ -277,7 +280,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         // the voice assistant and the alarms, on the glass, over everything (the lock screen too)
         if (widget.echo != null) Positioned.fill(child: VoiceLayer(s: widget.echo!, backdrop: backdrop, round: widget.round)),
       ]),
-    )));
+    );
+    }));
   }
 
   Widget _widget(Item it, Palette p, double cell) {
