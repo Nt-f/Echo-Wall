@@ -183,7 +183,7 @@ class _Card extends StatelessWidget {
             Row(mainAxisSize: MainAxisSize.min, children: [
               RoundButton(icon: CupertinoIcons.backward_fill, fg: fg, onTap: () => ha.call(d, 'media_previous_track', id)),
               const SizedBox(width: 12),
-              RoundButton(icon: st.state == 'playing' ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill, fg: Colors.black, fill: Colors.white, size: 64,
+              RoundButton(icon: ha.sounding(id) ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill, fg: Colors.black, fill: Colors.white, size: 64,
                   onTap: () => ha.playPause(id)),
               const SizedBox(width: 12),
               RoundButton(icon: CupertinoIcons.forward_fill, fg: fg, onTap: () => ha.call(d, 'media_next_track', id)),

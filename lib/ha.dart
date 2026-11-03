@@ -149,6 +149,7 @@ class Ha extends ChangeNotifier {
       for (final k in (minus?['a'] as List? ?? const [])) { st.attr.remove(k); }
     });
     for (final id in (e['r'] as List? ?? const [])) { states.remove(id); }
+    if (_held.isNotEmpty) _release();
     version++;
     notifyListeners();
   }
@@ -185,24 +186,43 @@ class Ha extends ChangeNotifier {
       send({'type': 'call_service', 'domain': domain, 'service': service, 'service_data': data, 'target': {'entity_id': entity}})
           .catchError((e) { debugPrint('ha: $domain.$service $entity: $e'); return null; });
 
-  /// play or pause a player.  Paused where it can pause; where it cannot, or the pause fails, stopped: Music
-  /// Assistant playing an AirPlay stream from a phone (its AirPlay receiver plugin) took media_play_pause and did
-  /// nothing, the button looked dead
+  /// a player playing a phone's AirPlay through Music Assistant's AirPlay receiver: only the phone can pause or
+  /// resume it (measured, MA 2.10.9: media_pause and media_play both "The command to the player failed."; a stop
+  /// ended the stream for good, the phone could not start it again)
+  static bool airPlay(EntityState? st) =>
+      '${st?.attr['app_id'] ?? ''}'.startsWith('airplay_receiver') || '${st?.attr['source'] ?? ''}'.contains('AirPlay Receiver');
+
+  /// what the play/pause buttons show: playing, and not an AirPlay stream this app muted as its pause
+  bool sounding(String id) {
+    final st = states[id];
+    return st?.state == 'playing' && !(_held.contains(id) && st?.attr['is_volume_muted'] == true);
+  }
+
+  /// players this app muted as AirPlay's pause: unmuted when the press comes again, or by themselves once the
+  /// AirPlay stream is over (else the next music would be silent)
+  final _held = <String>{};
+
+  /// play or pause a player.  An AirPlay stream (see airPlay): muted and unmuted, the stream kept; else paused or
+  /// played, a failed pause logged and left (never stopped: a stop could not be undone from here)
   Future<void> playPause(String id) async {
     final st = states[id];
-    final f = (st?.numAttr('supported_features') ?? 0).toInt();
-    debugPrint('ha: play/pause $id: ${st?.state}, features $f, source ${st?.attr['source']}, app ${st?.attr['app_id'] ?? st?.attr['app_name']}');
-    if (st?.state != 'playing') return call('media_player', 'media_play', id);
-    Future<dynamic> svc(String s) => send({'type': 'call_service', 'domain': 'media_player', 'service': s, 'target': {'entity_id': id}});
-    try {
-      if (f & 1 != 0) return await svc('media_pause');
-    } catch (e) {
-      debugPrint('ha: media_pause $id: $e; stopping instead');
+    debugPrint('ha: play/pause $id: ${st?.state}, source ${st?.attr['source']}, app ${st?.attr['app_id']}');
+    if (airPlay(st) && st?.state == 'playing') {
+      final hold = !_held.contains(id);
+      hold ? _held.add(id) : _held.remove(id);
+      notifyListeners();
+      return call('media_player', 'volume_mute', id, {'is_volume_muted': hold});
     }
-    try {
-      await svc('media_stop');
-    } catch (e) {
-      debugPrint('ha: media_stop $id: $e');
+    return call('media_player', st?.state == 'playing' ? 'media_pause' : 'media_play', id);
+  }
+
+  void _release() {
+    for (final id in _held.toList()) {
+      final st = states[id];
+      if (st == null || !airPlay(st) || st.state != 'playing') {
+        _held.remove(id);
+        call('media_player', 'volume_mute', id, {'is_volume_muted': false});
+      }
     }
   }
 

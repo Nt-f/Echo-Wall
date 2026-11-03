@@ -172,7 +172,7 @@ class _NowPlaying extends StatelessWidget {
     final pic = st.attr['entity_picture'] as String?;
     final title = st.attr['media_title'] as String? ?? st.name;
     final artist = st.attr['media_artist'] as String? ?? st.attr['media_album_name'] as String? ?? (title == st.name ? '' : st.name);
-    final playing = st.state == 'playing';
+    final playing = ha.sounding(id);
     void c(String s) => s == 'media_play_pause' ? ha.playPause(id) : ha.call('media_player', s, id);
     Widget button(IconData i, double s, String svc) => GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => c(svc),
         child: Padding(padding: EdgeInsets.all(1.6 * u), child: Icon(i, color: Colors.white, size: s)));
