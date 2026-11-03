@@ -75,7 +75,7 @@ Future<void> showCategory(BuildContext context, Ha ha, Layout lay, Palette p, Ba
           final cell = small ? 110.0 : 150.0, gap = small ? 10.0 : 14.0;
           final cols = max(2, ((box.maxWidth + gap) / (cell + gap)).floor());
           final cw = (box.maxWidth - gap * (cols - 1)) / cols;
-          // no repaint boundary per tile: a tile's glass is drawn from where it is on the screen (see home_view.dart)
+          // no repaint boundary per tile: a tile's glass is drawn from where it is on the screen (see wall_view.dart)
           return GridView.builder(
             addRepaintBoundaries: false,
             physics: const BouncingScrollPhysics(),

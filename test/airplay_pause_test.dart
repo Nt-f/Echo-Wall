@@ -1,7 +1,7 @@
 // AirPlay through Music Assistant: the Echo's pause mutes it (MA can neither pause nor resume the phone's stream),
 // the button shows play while muted so; another player's pause is a pause
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/ha.dart';
+import 'package:echo_screen/ha.dart';
 
 void main() {
   test('AirPlay: pause holds by muting, shown as paused; play releases', () async {

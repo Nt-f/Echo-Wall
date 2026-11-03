@@ -1,8 +1,8 @@
-# hassmic HomeView
+# Echo-Wall
 
 Home Assistant on an Amazon Echo Show running [hassmic](https://github.com/Nt-f/echo-dot-assist), in the manner of
 Apple's HomeView: frosted-glass widgets over a photo, a page per room, a lock screen of photos the clock finds room on.
-A fork of [hassmic-screen](https://github.com/Nt-f/hassmic-screen), the screen app template (its contract with
+A fork of [Echo-Screen](https://github.com/Nt-f/Echo-Screen), the screen app template (its contract with
 hassmic, its web screens, its keyboard, hassmic's clock, words and alarms drawn in the app's look); merge its `main`
 for its fixes.
 
@@ -17,7 +17,7 @@ for its fixes.
   page per room (Home Assistant's areas), its temperature and humidity beside its name. Swiped sideways.
 - **Tiles** as Home Assistant's tile card lays them out (the icon in a badge lit in its state's colour, the name, the
   state), on Apple's glass: a tap switches, a long press opens its detail. A tile gives a little under the finger.
-- **The detail**: the tile grows into a card while the HomeView dims behind it: Apple's tall pill for brightness,
+- **The detail**: the tile grows into a card while the WallView dims behind it: Apple's tall pill for brightness,
   position and speed, live while you drag (a light's colours and whites as circles beside it); a thermostat's temperature big with − and + and its modes; one big round
   button for a switch or a lock; a speaker's artwork, buttons and volume. Swipe it down or tap beside it to close.
 - **Editing**: hold the page dots. The widgets wobble; drag one to move it, ★ puts it on Home, − hides it; the bar picks
@@ -28,14 +28,14 @@ for its fixes.
   weather.get_forecasts).
 - **The voice assistant** on the glass, as Siri shows itself: while the Echo listens a glow of colour travels round the
   screen's edge; what you said and the answer rise on a card from the bottom; an alarm or a timer rings on glass over
-  the dimmed HomeView (a tap snoozes, a long press stops: hassmic reads the touch itself).
-- **The lock screen**: left alone (2 minutes), the HomeView rests behind a photo with the time, the date, the weather
+  the dimmed WallView (a tap snoozes, a long press stops: hassmic reads the touch itself).
+- **The lock screen**: left alone (2 minutes), the WallView rests behind a photo with the time, the date, the weather
   and the next alarm where the photo has room for them; swipe up to open. Its photos are your **Immich** library's, or
   the nature photos that come with the app.
 
 ## Photos from Immich
 
-In Home Assistant: hassmic › Configure on the Echo Show › "Screen app settings", one per line:
+In Home Assistant: Echo Local › Configure on the Echo Show › "Screen app settings", one per line:
 
 ```
 immich.url=http://192.168.1.20:2283
@@ -82,7 +82,7 @@ demo integration's made-up home; only the Echo Show 5 has run it for real.
 ## Build and install
 
 Flutter 3.41.2. `flutter build apk --release --target-platform android-arm`, `adb install` it, and in Home Assistant:
-hassmic › Configure on the Echo › "Screen app": `org.hassmic.homeview`.
+Echo Local › Configure on the Echo › "Screen app": `io.github.nt_f.echowall`.
 
 ## Credits
 

@@ -2,9 +2,9 @@
 // player, "Not Playing", in the same place
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/ha.dart';
-import 'package:hassmic_screen/home/home_view.dart';
-import 'package:hassmic_screen/home/layout.dart';
+import 'package:echo_screen/ha.dart';
+import 'package:echo_screen/home/wall_view.dart';
+import 'package:echo_screen/home/layout.dart';
 
 void main() {
   testWidgets('the media card stays: playing, untitled, stopped', (t) async {
@@ -15,7 +15,7 @@ void main() {
     ha.states['media_player.tv'] = EntityState('off', {'friendly_name': 'TV'});
     ha.states['media_player.echo'] = EntityState('idle', {'friendly_name': 'Echo Show'});
     final lay = Layout()..wallpaper = Wallpaper.amber..favorites = []..ambientSeconds = 0..digitalClock = false;   // room on page 1
-    await t.pumpWidget(MaterialApp(home: HomeView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
+    await t.pumpWidget(MaterialApp(home: WallView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
     await t.pump(const Duration(milliseconds: 100));
     // nothing played yet: the one that is on
     expect(find.text('NOT PLAYING'), findsOneWidget);
@@ -50,7 +50,7 @@ void main() {
     ha.states['media_player.echo'] = EntityState('playing', {'friendly_name': 'Echo Show', 'media_title': 'Song'});
     // clocks, date: the first row; three locks: the second, but its last cell
     final lay = Layout()..wallpaper = Wallpaper.amber..favorites = ['lock.a', 'lock.b', 'lock.c']..ambientSeconds = 0;
-    await t.pumpWidget(MaterialApp(home: HomeView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
+    await t.pumpWidget(MaterialApp(home: WallView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
     await t.pump(const Duration(milliseconds: 100));
     expect(find.text('SONG'), findsOneWidget);
     expect(t.getCenter(find.text('SONG')).dx, greaterThan(16 + 3 * 235.5));

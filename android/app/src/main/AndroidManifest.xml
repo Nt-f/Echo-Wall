@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="hassmic HomeView"
+        android:label="Echo-Wall"
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:name="${applicationName}"
@@ -26,7 +26,7 @@
               />
             <!-- hassmic's screen app contract (echo-dot-assist docs/screen-apps.md): hassmic starts the app by this -->
             <intent-filter>
-                <action android:name="org.hassmic.action.SCREEN" />
+                <action android:name="io.github.gamer92000.echodotassist.action.SCREEN" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>

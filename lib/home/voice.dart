@@ -1,6 +1,6 @@
-// The voice assistant on the HomeView, as Siri shows itself: while the Echo listens, a glow of colour travels round
+// The voice assistant on the WallView, as Siri shows itself: while the Echo listens, a glow of colour travels round
 // the screen's edge; what you said and what the assistant answered rise on a glass card from the bottom; an alarm or
-// timer ringing on glass over the dimmed HomeView.  What is shown comes from hassmic (its state feed, lib/hassmic.dart
+// timer ringing on glass over the dimmed WallView.  What is shown comes from hassmic (its state feed, lib/hassmic.dart
 // EchoState: hassmic leaves the screen to this app for these); taps on a ring are hassmic's own (it reads the touch
 // screen), so nothing here acts on them.
 //
@@ -146,7 +146,7 @@ class _ListeningState extends State<_Listening> with SingleTickerProviderStateMi
       ]);
 }
 
-/// an alarm or timer ringing: glass over the dimmed HomeView, the icon in a ring that pulses, what stops it
+/// an alarm or timer ringing: glass over the dimmed WallView, the icon in a ring that pulses, what stops it
 class _Ring extends StatelessWidget {
   final EchoState s;
   final Backdrop backdrop;

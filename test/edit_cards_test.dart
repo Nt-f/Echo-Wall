@@ -2,9 +2,9 @@
 // any back, devices included
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/ha.dart';
-import 'package:hassmic_screen/home/home_view.dart';
-import 'package:hassmic_screen/home/layout.dart';
+import 'package:echo_screen/ha.dart';
+import 'package:echo_screen/home/wall_view.dart';
+import 'package:echo_screen/home/layout.dart';
 
 void main() {
   Future<(Ha, Layout)> home(WidgetTester t) async {
@@ -15,7 +15,7 @@ void main() {
     ha.states['lock.a'] = EntityState('locked', {'friendly_name': 'Lock A'});
     ha.states['light.desk'] = EntityState('off', {'friendly_name': 'Desk'});
     final lay = Layout()..wallpaper = Wallpaper.amber..favorites = ['lock.a']..ambientSeconds = 0..digitalClock = false;
-    await t.pumpWidget(MaterialApp(home: HomeView(ha: ha, layout: lay, h24: true, screens: const ['Music'], onScreen: (_) {})));
+    await t.pumpWidget(MaterialApp(home: WallView(ha: ha, layout: lay, h24: true, screens: const ['Music'], onScreen: (_) {})));
     await t.pump(const Duration(milliseconds: 100));
     await t.longPressAt(const Offset(480, 480 - 11));
     await t.pump(const Duration(milliseconds: 300));

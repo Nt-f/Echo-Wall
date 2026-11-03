@@ -1,4 +1,4 @@
-// The HomeView's widgets: square glass over the wallpaper, in the manner of Apple's HomeView.  Sizes are fractions of
+// The WallView's widgets: square glass over the wallpaper, in the manner of Apple's HomeView.  Sizes are fractions of
 // the cell (`u`: a hundredth of a cell's side), so a tile reads the same on a Show 5's 139 px cells and a Show 15's.
 // The glass is Apple's material: the wallpaper behind it blurred once and drawn piece by piece (backdrop.dart).
 import 'dart:async';
@@ -245,7 +245,7 @@ class _ThermostatCardState extends State<ThermostatCard> {
   }
 }
 
-/// what plays: its cover, the title big, the buttons.  Always on Home (home_view.dart nowPlayer), at the size that fits
+/// what plays: its cover, the title big, the buttons.  Always on Home (wall_view.dart nowPlayer), at the size that fits
 /// on its first page: 4 = 2 x 2 cells, 2 = 2 x 1 (the cover beside the words), 1 = a tile (the cover, the title, play)
 class NowPlayingCard extends StatelessWidget {
   final Ha ha;

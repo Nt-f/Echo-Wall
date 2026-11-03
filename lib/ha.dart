@@ -88,7 +88,7 @@ class Ha extends ChangeNotifier {
       case 'auth_required':
         _ws?.add(jsonEncode({'type': 'auth', 'access_token': _token}));
       case 'auth_invalid':
-        error = 'Home Assistant refused the login: set the screen up again from the hassmic integration';
+        error = 'Home Assistant refused the login: set the screen up again from the Echo Local integration';
         notifyListeners();
       case 'auth_ok':
         connected = true; error = null;

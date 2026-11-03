@@ -25,11 +25,11 @@ jobs:
       - run: flutter build apk --release --target-platform android-arm
       - uses: actions/upload-artifact@v4
         with:
-          name: hassmic-homeview
+          name: Echo-Wall
           path: build/app/outputs/flutter-apk/app-release.apk
       - if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk hassmic-homeview.apk
-          gh release create "$GITHUB_REF_NAME" hassmic-homeview.apk --title "$GITHUB_REF_NAME" --generate-notes
+          cp build/app/outputs/flutter-apk/app-release.apk Echo-Wall.apk
+          gh release create "$GITHUB_REF_NAME" Echo-Wall.apk --title "$GITHUB_REF_NAME" --generate-notes

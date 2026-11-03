@@ -2,10 +2,10 @@
 // swap; every widget moves (the clocks, the date, a screen's like Music); held at the screen's edge, the page turns
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/ha.dart';
-import 'package:hassmic_screen/home/backdrop.dart';
-import 'package:hassmic_screen/home/home_view.dart';
-import 'package:hassmic_screen/home/layout.dart';
+import 'package:echo_screen/ha.dart';
+import 'package:echo_screen/home/backdrop.dart';
+import 'package:echo_screen/home/wall_view.dart';
+import 'package:echo_screen/home/layout.dart';
 
 // the Echo Show 5: 4 x 2 cells, editing or not; in edit mode 221.5 x 166 px, 14 px apart, the grid from (16, 112)
 Offset cellCenter(int c, int r) => Offset(16 + c * 235.5 + 110, 112 + r * 180 + 83);
@@ -21,7 +21,7 @@ void main() {
       ..wallpaper = Wallpaper.amber
       ..favorites = ['lock.a', 'lock.b', 'lock.c', 'lock.d'].take(locks).toList()
       ..ambientSeconds = 0;
-    await t.pumpWidget(MaterialApp(home: HomeView(ha: ha, layout: lay, h24: true, screens: screens, onScreen: (_) {})));
+    await t.pumpWidget(MaterialApp(home: WallView(ha: ha, layout: lay, h24: true, screens: screens, onScreen: (_) {})));
     await t.pump(const Duration(milliseconds: 100));
     await t.longPressAt(const Offset(480, 480 - 11));   // hold the page dots: edit mode
     await t.pump(const Duration(milliseconds: 300));
@@ -115,7 +115,7 @@ void main() {
     // unavailable, as the Echo's own entities were: their tiles at half opacity, a layer of their own
     for (final n in ['a', 'b', 'c', 'd', 'e']) { ha.states['switch.$n'] = EntityState('unavailable', {'friendly_name': 'Switch $n'}); }
     final lay = Layout()..wallpaper = Wallpaper.amber..favorites = []..ambientSeconds = 0;
-    await t.pumpWidget(MaterialApp(home: HomeView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
+    await t.pumpWidget(MaterialApp(home: WallView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
     await t.pump(const Duration(milliseconds: 100));
     await t.runAsync(() => Future.delayed(const Duration(milliseconds: 500)));   // the wallpaper painted and blurred
     await t.pump(const Duration(milliseconds: 100));

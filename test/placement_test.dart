@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/home/placement.dart';
+import 'package:echo_screen/home/placement.dart';
 
 /// a 64 x 32 picture: the left half busy (noise), the right half a calm sky, bright above and dark below
 (Float64List, Float64List) picture() {

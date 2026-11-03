@@ -1,5 +1,5 @@
 // A device's detail, as Apple's Home opens one: the tile grows out of its place into a card (a hero flight of its
-// glass), the HomeView behind it dims, the card is a thick material and holds one large control:
+// glass), the WallView behind it dims, the card is a thick material and holds one large control:
 //   lights, blinds, fans                       the tall pill, live while the finger moves (sent at most 4 times a second)
 //   a thermostat                               its temperature big, round − and +, its modes as a segmented control
 //   a switch, a lock                           one large round button
@@ -25,7 +25,7 @@ Future<void> showDetail(BuildContext context, Ha ha, Palette p, String id, Backd
       barrierColor: const Color(0x00000000),            // the dimming is the page's own (it fades with the card)
       transitionDuration: const Duration(milliseconds: 420),
       reverseTransitionDuration: const Duration(milliseconds: 320),
-      // the route is not under the HomeView: its backdrop handed over, for the card's glass
+      // the route is not under the WallView: its backdrop handed over, for the card's glass
       pageBuilder: (context, a, _) => backdrop == null ? _DetailPage(ha: ha, p: p, id: id, anim: a)
           : BackdropScope(backdrop: backdrop, child: _DetailPage(ha: ha, p: p, id: id, anim: a)),
     ));
@@ -50,7 +50,7 @@ class _DetailPageState extends State<_DetailPage> {
     final size = MediaQuery.sizeOf(context), small = size.shortestSide < 400;
     final w = min(size.width * (small ? .86 : .62), 640.0), h = min(size.height * (small ? .86 : .82), 560.0);
     return AnimatedBuilder(animation: a, builder: (context, _) => Stack(children: [
-      // the HomeView behind: dimmed; a tap there closes
+      // the WallView behind: dimmed; a tap there closes
       Positioned.fill(child: GestureDetector(onTap: close, child: ColoredBox(color: Color.fromRGBO(0, 0, 0, .5 * a.value * (1 - drag / 600).clamp(0, 1))))),
       Center(child: GestureDetector(
         onVerticalDragUpdate: (d) => setState(() => drag = max(0, drag + d.delta.dy)),

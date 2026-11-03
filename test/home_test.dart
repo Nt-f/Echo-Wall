@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/home/home_view.dart';
+import 'package:echo_screen/home/wall_view.dart';
 
 void main() {
   test('packing: big ones where they fit, the small ones fill around them, a full page starts the next', () {

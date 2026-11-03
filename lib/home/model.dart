@@ -1,4 +1,4 @@
-// What the HomeView shows of Home Assistant and how each thing looks: on or off, its icon and colour, the line under
+// What the WallView shows of Home Assistant and how each thing looks: on or off, its icon and colour, the line under
 // its name, a level bar; what a tap does.  Rooms are Home Assistant's areas.
 import 'package:flutter/material.dart';
 

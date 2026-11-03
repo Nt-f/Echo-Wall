@@ -1,6 +1,6 @@
-// The lock screen the HomeView rests on: a photo (Immich's, or the app's nature photos), the time and date where the
+// The lock screen the WallView rests on: a photo (Immich's, or the app's nature photos), the time and date where the
 // photo leaves room for them (placement.dart), a new photo every few minutes (crossfaded), and a swipe up that lifts
-// it off the HomeView.  A tap shows how.
+// it off the WallView.  A tap shows how.
 import 'dart:async';
 import 'dart:math';
 

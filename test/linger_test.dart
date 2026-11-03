@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hassmic_screen/hassmic.dart';
+import 'package:echo_screen/hassmic.dart';
 
 void main() {
   test('words while a run goes, then a linger after it ends', () async {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Screenshots of hassmic HomeView on Echo screens, for the README (docs/screenshots/).
+"""Screenshots of Echo-Wall on Echo screens, for the README (docs/screenshots/).
 
 Every model is an Android emulator with that screen's resolution and density (not Fire OS: layouts and resolution are
 what this shows, not the Echo's speed); what it shows comes from a Home Assistant with the demo integration (made-up
@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDK = os.environ.get("ANDROID_HOME", os.path.expanduser("~/Android/Sdk"))
 ADB, EMU = os.path.join(SDK, "platform-tools", "adb"), os.path.join(SDK, "emulator", "emulator")
 HA_PORT, HASSMIC_PORT, SERIAL = 18123, 28931, "emulator-5554"
-PKG = "org.hassmic.homeview"
+PKG = "io.github.nt_f.echowall"
 
 # (id, name, width, height, density, density known or estimated, round)
 MODELS = [
@@ -85,7 +85,7 @@ async def ha_token():
         await ws.receive_json(); await ws.send_json({"type": "auth", "access_token": tok}); await ws.receive_json()
         await ws.send_json({"id": 1, "type": "auth/long_lived_access_token", "client_name": "screenshots", "lifespan": 10})
         r = await ws.receive_json()
-        # rooms for the demo's things (it gives some devices none): what the HomeView's pages are made of
+        # rooms for the demo's things (it gives some devices none): what the WallView's pages are made of
         n = [10]
         async def q(**m):
             n[0] += 1; await ws.send_json({"id": n[0], **m})
@@ -183,7 +183,7 @@ DISABLED = set()
 
 
 def restore():
-    adb("shell", "setprop", "debug.hassmic.round", "0", check=False)
+    adb("shell", "setprop", "debug.echoscreen.round", "0", check=False)
     for pkg in DISABLED: adb("shell", "pm", "enable", pkg, check=False)
     for c in (("wm", "size", "reset"), ("wm", "density", "reset"), ("settings", "put", "system", "accelerometer_rotation", "1"),
               ("settings", "delete", "secure", "immersive_mode_confirmations")):
@@ -243,16 +243,16 @@ def main():
             if a.only and m[0] not in a.only.split(","): continue
             mid, title, w, h, dpi, _, round_ = m
             print(f"{title}: {w} x {h} @ {dpi}", flush=True)
-            adb("shell", "setprop", "debug.hassmic.round", "1" if round_ else "0")      # the app's round layout
+            adb("shell", "setprop", "debug.echoscreen.round", "1" if round_ else "0")      # the app's round layout
             screen(w, h, dpi)
             hm.screens(token, 0)
-            adb("shell", "setprop", "debug.hassmic.ambient", "0")
-            adb("shell", "am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
-            time.sleep(14)                      # the HomeView: Home Assistant's websocket, no web page
+            adb("shell", "setprop", "debug.echoscreen.ambient", "0")
+            adb("shell", "am", "start", "-a", "io.github.gamer92000.echodotassist.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
+            time.sleep(14)                      # the WallView: Home Assistant's websocket, no web page
             shot(os.path.join(out, f"{mid}-home.png"), round_)
             d = dpi / 160
             # past Home's pages to a room: the demo's Home takes about 20 cells (the clocks, the date, a thermostat, a
-            # camera, locks, what plays, the screens), a page rows x cols of them (as home_view.dart lays them out)
+            # camera, locks, what plays, the screens), a page rows x cols of them (as wall_view.dart lays them out)
             ins = .146 * min(w, h) if round_ else 0
             iw, ih = (w - 2 * ins) / d, (h - 2 * ins) / d
             small = ih < 360
@@ -288,7 +288,7 @@ def main():
             time.sleep(2)
             shot(os.path.join(out, f"{mid}-category.png"), round_)
             adb("shell", "input", "keyevent", "BACK"); time.sleep(1.2)
-            # the forecast: the date's card, where the HomeView packs it (after the analog clock and the digital one)
+            # the forecast: the date's card, where the WallView packs it (after the analog clock and the digital one)
             grid = [[False] * cols for _ in range(rows)]
             spot = None
             for wdt in (1, 2, 1):
@@ -315,12 +315,12 @@ def main():
             time.sleep(1.5)
             shot(os.path.join(out, f"{mid}-alarm.png"), round_)
             hm.set_state(ringing="", ringing_alarm=False)
-            adb("shell", "setprop", "debug.hassmic.ambient", "6")
+            adb("shell", "setprop", "debug.echoscreen.ambient", "6")
             adb("shell", "am", "force-stop", PKG)
-            adb("shell", "am", "start", "-a", "org.hassmic.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
+            adb("shell", "am", "start", "-a", "io.github.gamer92000.echodotassist.action.SCREEN", "-c", "android.intent.category.DEFAULT", PKG)
             time.sleep(24)
             shot(os.path.join(out, f"{mid}-lock.png"), round_)       # the lock screen: a photo, the clock where it has room
-            adb("shell", "setprop", "debug.hassmic.ambient", "0")
+            adb("shell", "setprop", "debug.echoscreen.ambient", "0")
     except Exception:
         print(open(os.path.join(tmp, "ha.log"), errors="replace").read()[-3000:], file=sys.stderr)
         raise

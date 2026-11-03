@@ -1,4 +1,4 @@
-// The HomeView: pages of square glass widgets over a wallpaper, swiped sideways.  Home first (the clocks, the date and
+// The WallView: pages of square glass widgets over a wallpaper, swiped sideways.  Home first (the clocks, the date and
 // weather, the favourites: a thermostat big, a camera, scenes, locks; what plays; the app's other screens), then a page
 // per room (Home Assistant's areas).  Hold the page dots to edit: the widgets wobble, a drag moves one, ★ puts it on
 // Home, − hides it; the bar picks the wallpaper.  Left alone, the ambient clock.
@@ -102,7 +102,7 @@ List<PageSpec> pack(String name, String sub, String? area, List<Item> items, int
   return [for (var i = 0; i <= last; i++) PageSpec(name, sub, area, placed[i], index: i)];
 }
 
-class HomeView extends StatefulWidget {
+class WallView extends StatefulWidget {
   final Ha ha;
   final Layout layout;
   final bool h24;
@@ -112,13 +112,13 @@ class HomeView extends StatefulWidget {
   final bool round;                             // an Echo Spot: the widgets inside the circle's square
   final EchoState? echo;                        // hassmic's: a request, a ring (drawn here on the glass)
   final String nextAlarm;
-  const HomeView({super.key, required this.ha, required this.layout, required this.h24, required this.screens, required this.onScreen,
+  const WallView({super.key, required this.ha, required this.layout, required this.h24, required this.screens, required this.onScreen,
       this.settings = const {}, this.nextAlarm = '', this.round = false, this.echo});
   @override
-  State<HomeView> createState() => _HomeViewState();
+  State<WallView> createState() => _WallViewState();
 }
 
-class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, WidgetsBindingObserver {
+class _WallViewState extends State<WallView> with TickerProviderStateMixin, WidgetsBindingObserver {
   final pc = PageController();
   int page = 0;
   bool editing = false, ambient = false;
@@ -154,7 +154,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, Widg
   Ha get ha => widget.ha;
   Layout get lay => widget.layout;
 
-  int? ambientOverride;                         // debug.hassmic.ambient (screenshots)
+  int? ambientOverride;                         // debug.echoscreen.ambient (screenshots)
 
   /// the app in front with its screen on (Android pauses the activity when the screen goes off or another app comes)
   bool resumed = true;
@@ -169,7 +169,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, Widg
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     wobble = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
-    const MethodChannel('hassmic/keys').invokeMethod<String>('prop', 'debug.hassmic.ambient').then((v) {
+    const MethodChannel('echo_screen/keys').invokeMethod<String>('prop', 'debug.echoscreen.ambient').then((v) {
       final n = int.tryParse(v ?? '');
       if (n != null && n > 0) ambientOverride = n;
     }).catchError((_) {});
@@ -300,7 +300,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, Widg
   @override
   Widget build(BuildContext context) {
     // the palette and the wallpaper inside the layout's builder: a theme picked in edit mode shows at once (in build()
-    // above it they changed only once the HomeView itself was built again, at Done)
+    // above it they changed only once the WallView itself was built again, at Done)
     return BackdropScope(backdrop: backdrop, child: ListenableBuilder(listenable: Listenable.merge([ha, lay]), builder: (context, _) {
       final p = Palette.of(lay.wallpaper);
       if (_wallFor != lay.wallpaper) { _wallFor = lay.wallpaper; WidgetsBinding.instance.addPostFrameCallback((_) => _wallpaper()); }
@@ -360,14 +360,14 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, Widg
             if (ps.isNotEmpty) _dots(ps, p),
             if (editing) _bar(ps, p),
             if (ps.length == 1 && ha.areas.isEmpty && ha.connected)
-              Center(child: Text('Give your devices areas in Home Assistant:\nthe HomeView shows them room by room.',
+              Center(child: Text('Give your devices areas in Home Assistant:\nthe WallView shows them room by room.',
                   textAlign: TextAlign.center, style: TextStyle(color: p.text, fontSize: 16))),
             if (!ha.connected)
               Positioned(left: 0, right: 0, top: 6, child: Center(child: Text(ha.error ?? 'Connecting to Home Assistant…',
                   style: TextStyle(color: p.dim, fontSize: 12)))),
           ]);
         }))),
-        // resting: the lock screen over the HomeView, lifted off by a swipe up
+        // resting: the lock screen over the WallView, lifted off by a swipe up
         if (ambient) Positioned.fill(child: LockScreen(photos: photos..configure(widget.settings), ha: ha, h24: widget.h24,
             player: lay.nowPlaying ? nowPlayer() : null,
             nextAlarm: widget.nextAlarm, minutes: int.tryParse(widget.settings['photos.minutes'] ?? '') ?? 3, round: widget.round,
@@ -458,7 +458,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, Widg
       data: key,
       // the finger at the tile's middle, the tile at its own size, lifted
       dragAnchorStrategy: (d, context, position) => Offset(box.maxWidth / 2, box.maxHeight / 2),
-      // the lifted copy is drawn in the Overlay, outside the HomeView: its glass needs the backdrop handed on
+      // the lifted copy is drawn in the Overlay, outside the WallView: its glass needs the backdrop handed on
       feedback: BackdropScope(backdrop: backdrop, child: SizedBox(width: box.maxWidth, height: box.maxHeight,
           child: Transform.scale(scale: 1.06, child: Opacity(opacity: .92, child: Material(color: Colors.transparent, child: w))))),
       childWhenDragging: Opacity(opacity: .25, child: body),
@@ -504,7 +504,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, Widg
   }
 
   /// the edit mode's dialogs: solid (the palette's sheet is glass, made for a backdrop behind it; over the busy
-  /// HomeView its words were lost)
+  /// WallView its words were lost)
   Color _solid(Palette p) => p.text == Colors.white ? const Color(0xf71c1c1e) : const Color(0xf7f2f2f7);
 
   void _clearPage(List<PageSpec> ps, Palette p) {

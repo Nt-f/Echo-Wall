@@ -1,8 +1,8 @@
-// hassmic HomeView: Home Assistant on an Echo Show as Apple's HomeView shows a home (lib/home/), on hassmic-screen
+// Echo-Wall: Home Assistant on an Echo Show as Apple's HomeView shows a home (lib/home/), on Echo-Screen
 // (the template this is a fork of: the contract with hassmic, the web screens, the keyboard, hassmic's pictures).
-// The HomeView is the first screen; the integration's screens follow it in the switcher and as tiles on Home.
+// The WallView is the first screen; the integration's screens follow it in the switcher and as tiles on Home.
 //
-// hassmic-screen: a screen app for an Echo Show running hassmic (echo-dot-assist docs/screen-apps.md), in Flutter.
+// Echo-Screen: a screen app for an Echo Show running hassmic (echo-dot-assist docs/screen-apps.md), in Flutter.
 // It does what hassmic's own Java kiosk does, as a template to build on: the screens Home Assistant's hassmic
 // integration chose (Home Assistant's dashboards, Music Assistant, any page) in a WebView, logged into Home Assistant
 // with the Echo's own token, a handle at the top edge to switch, back to the start screen after a while untouched, and
@@ -19,7 +19,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'hassmic.dart';
 import 'echo_ui.dart';
 import 'ha.dart';
-import 'home/home_view.dart';
+import 'home/wall_view.dart';
 import 'home/layout.dart';
 import 'keyboard.dart';
 
@@ -57,7 +57,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   EchoState echo = const EchoState();
   final ha = Ha();
   Layout? layout;
-  static const home = -2;                       // `current` while the HomeView shows
+  static const home = -2;                       // `current` while the WallView shows
   ScreenConfig? cfg;
   bool reached = false, front = true;
   WebViewController? web;
@@ -74,10 +74,10 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    const MethodChannel('hassmic/keys').invokeMethod<bool>('hasInputMethod').then((has) {
+    const MethodChannel('echo_screen/keys').invokeMethod<bool>('hasInputMethod').then((has) {
       if (mounted && has == true) setState(() => ownKeyboard = false);
     }).catchError((_) {});
-    const MethodChannel('hassmic/keys').invokeMethod<bool>('isRound').then((r) {
+    const MethodChannel('echo_screen/keys').invokeMethod<bool>('isRound').then((r) {
       if (mounted && r == true) setState(() => round = true);
     }).catchError((_) {});
     Layout.load().then((l) { if (mounted) setState(() => layout = l); });
@@ -88,7 +88,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
       if (keep != (echo.display == 'always' || echo.display == 'always_dim') || echo.v == 0) {
         // "always on": the window keeps the screen on too, whatever the screen timeout says (hassmic sets that, but
         // a tool that sets it after hassmic would put the screen to sleep, and a sleeping panel takes no touch)
-        const MethodChannel('hassmic/keys').invokeMethod('keepOn', keep).catchError((_) => null);
+        const MethodChannel('echo_screen/keys').invokeMethod('keepOn', keep).catchError((_) => null);
       }
       setState(() => echo = s);
     });
@@ -130,13 +130,13 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
       final sameScreens = old != null && _urls(old) == _urls(c);
       setState(() { cfg = c; reached = true; });
       if (newLogin) injectedFor = '';
-      ha.configure(c.enabled ? c.ha : '', c.token);   // the HomeView's own connection, with the Echo's login
+      ha.configure(c.enabled ? c.ha : '', c.token);   // the WallView's own connection, with the Echo's login
       if (!c.enabled) { _stop(); return; }
       _start();
       if (!sameScreens || newLogin || current == -1 || current >= c.screens.length) _home();
       return;
     }
-    // untouched long enough on another screen: back to the HomeView
+    // untouched long enough on another screen: back to the WallView
     if (c.enabled && web != null && c.returnSeconds > 0 && current != home &&
         DateTime.now().difference(touched).inSeconds > c.returnSeconds) {
       _home();
@@ -145,9 +145,9 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
 
   static String _urls(ScreenConfig c) => c.screens.map((s) => s.url).join('\n');
 
-  /// a screen offered here: the HomeView replaces the template's clock (hassmic:clock; its lock screen is the clock
+  /// a screen offered here: the WallView replaces the template's clock (hassmic:clock; its lock screen is the clock
   /// here) and the old web wall panel (hassmic's wall.html), which an integration set up before may still list
-  static bool _offered(Screen s) => !s.url.startsWith('hassmic:') && !s.url.contains('/hassmic/wall.html');
+  static bool _offered(Screen s) => !s.url.startsWith('hassmic:') && !s.url.contains('/echo_local/wall.html');
 
   // ---------------------------------------------------------------- the WebView
 
@@ -200,7 +200,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     setState(() { current = i; bar = false; typing = false; });
     touched = DateTime.now();
     final url = c.screens[i].url;
-    if (!_offered(c.screens[i])) { _home(); return; }   // the clock, the old wall: the HomeView instead
+    if (!_offered(c.screens[i])) { _home(); return; }   // the clock, the old wall: the WallView instead
     if (url == loaded) return;                  // there already
     _load(c, w, url);
   }
@@ -237,13 +237,13 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     } else {
       body = Column(children: [
         Expanded(child: Stack(children: [
-          // the page; the WebView stays (its page kept) under the HomeView
+          // the page; the WebView stays (its page kept) under the WallView
           WebViewWidget(controller: w),
-          // the HomeView, the same way: faded out into a web screen (its tile), back in after idle
+          // the WallView, the same way: faded out into a web screen (its tile), back in after idle
           if (layout != null)
             Positioned.fill(child: IgnorePointer(ignoring: current != home, child: AnimatedOpacity(
               opacity: current == home ? 1 : 0, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut,
-              child: HomeView(ha: ha, layout: layout!, h24: echo.h24,
+              child: WallView(ha: ha, layout: layout!, h24: echo.h24,
                   screens: [for (final s in c.screens) if (_offered(s)) s.name],
                   onScreen: (i) => _show(c.screens.indexOf([for (final s in c.screens) if (_offered(s)) s][i])),
                   settings: c.settings, nextAlarm: echo.nextAlarmText, round: round, echo: echo),
@@ -264,7 +264,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     if (reached && c != null && c.enabled) {
       body = Stack(children: [
         body,
-        // on the HomeView, its own glass draws these (home/voice.dart); on a web screen, the template's
+        // on the WallView, its own glass draws these (home/voice.dart); on a web screen, the template's
         if (current != home) ...[
           if (echo.ringing.isNotEmpty) RingOverlay(s: echo, round: round) else if (echo.words) WordsOverlay(s: echo, round: round),
         ],

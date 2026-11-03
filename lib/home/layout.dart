@@ -1,4 +1,4 @@
-// The HomeView's layout, the owner's: the wallpaper, Home's widgets in order, what is hidden, each room's order, the
+// The WallView's layout, the owner's: the wallpaper, Home's widgets in order, what is hidden, each room's order, the
 // idle clock.  Kept in the app's own files (it is this Echo's), saved half a second after the last change.
 import 'dart:async';
 import 'dart:convert';
@@ -11,7 +11,7 @@ enum Wallpaper { photo, amber, dusk, light }
 
 class Layout extends ChangeNotifier {
   Wallpaper wallpaper = Wallpaper.photo;
-  List<String>? favorites;                      // null: the HomeView picks (a thermostat, a camera, scenes, locks)
+  List<String>? favorites;                      // null: the WallView picks (a thermostat, a camera, scenes, locks)
   Set<String> hidden = {};
   Map<String, List<String>> order = {};        // area id: its tiles first in this order
   List<String> homeOrder = [];                  // Home's widgets by key (clocks, date, screens, devices), as moved

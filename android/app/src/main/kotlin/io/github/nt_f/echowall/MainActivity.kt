@@ -1,4 +1,4 @@
-package org.hassmic.hassmic_screen
+package io.github.nt_f.echowall
 
 import android.os.SystemClock
 import android.view.KeyCharacterMap
@@ -26,14 +26,14 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
-        MethodChannel(engine.dartExecutor.binaryMessenger, "hassmic/keys").setMethodCallHandler { call, result ->
-            if (call.method == "isRound") {             // the Echo Spot's round glass (and debug.hassmic.round=1 for screenshots)
+        MethodChannel(engine.dartExecutor.binaryMessenger, "echo_screen/keys").setMethodCallHandler { call, result ->
+            if (call.method == "isRound") {             // the Echo Spot's round glass (and debug.echoscreen.round=1 for screenshots)
                 val prop = try {
-                    Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, "debug.hassmic.round") as String
+                    Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, "debug.echoscreen.round") as String
                 } catch (e: Exception) { "" }
                 result.success(resources.configuration.isScreenRound || prop == "1"); return@setMethodCallHandler
             }
-            if (call.method == "prop") {                // debug.hassmic.* for screenshots (an idle clock sooner)
+            if (call.method == "prop") {                // debug.echoscreen.* for screenshots (an idle clock sooner)
                 val v = try {
                     Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, call.arguments as String) as String
                 } catch (e: Exception) { "" }

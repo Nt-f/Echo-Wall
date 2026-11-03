@@ -1,4 +1,4 @@
-// The HomeView's backdrop and its glass, as Apple's materials work: a card shows what is behind it, blurred, its colour
+// The WallView's backdrop and its glass, as Apple's materials work: a card shows what is behind it, blurred, its colour
 // lifted (vibrancy), lightened or darkened by the material's tint.  A live blur of the screen behind every card costs
 // a Mali-T720 half its frames (25-43 fps measured); but what is behind the cards is the wallpaper, which does not move,
 // so it is blurred once (per photo and screen size) and every card draws its own piece of that blurred image, found
