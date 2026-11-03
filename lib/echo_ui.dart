@@ -110,13 +110,14 @@ class WordsOverlay extends StatelessWidget {
       })));
 }
 
-/// an alarm or timer ringing: what rings, big, and what stops it (hassmic reads the taps itself)
+/// an alarm or timer ringing: what rings, big, and what stops it (a tap snoozes, a hold stops: told to hassmic)
 class RingOverlay extends StatelessWidget {
   final EchoState s;
   final bool round;
   const RingOverlay({super.key, required this.s, this.round = false});
   @override
-  Widget build(BuildContext context) => _Opaque(child: LayoutBuilder(builder: (context, outer) {
+  Widget build(BuildContext context) => _Opaque(onTap: () => Hassmic.ring(stop: false), onLongPress: () => Hassmic.ring(stop: true),
+      child: LayoutBuilder(builder: (context, outer) {
         return Stack(children: [
           Container(height: 1.2 * unit(outer), color: cyan),
           roundInset(round, LayoutBuilder(builder: (context, box) { final u = unit(box); return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -133,12 +134,13 @@ class RingOverlay extends StatelessWidget {
       }));
 }
 
-/// black over everything, every touch kept from what is under it (the taps are hassmic's)
+/// black over everything, every touch kept from what is under it
 class _Opaque extends StatelessWidget {
   final Widget child;
-  const _Opaque({required this.child});
+  final VoidCallback? onTap, onLongPress;
+  const _Opaque({required this.child, this.onTap, this.onLongPress});
   @override
   Widget build(BuildContext context) => GestureDetector(
-        behavior: HitTestBehavior.opaque, onTap: () {}, onLongPress: () {},
+        behavior: HitTestBehavior.opaque, onTap: onTap ?? () {}, onLongPress: onLongPress ?? () {},
         child: Container(color: Colors.black, child: SafeArea(child: child)));
 }

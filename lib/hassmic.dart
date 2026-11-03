@@ -46,6 +46,20 @@ class ScreenConfig {
 
 class Hassmic {
   static const config = 'http://127.0.0.1:28931/kiosk/config';
+
+  /// the ring this app draws, tapped (an alarm snoozes, a timer stops) or held (stop): hassmic does it (this app's
+  /// claim of the ring leaves the finger here; GET /kiosk/ring/snooze|stop, from this app's uid only)
+  static Future<void> ring({required bool stop}) async {
+    final c = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+    try {
+      final rq = await c.getUrl(Uri.parse('http://127.0.0.1:28931/kiosk/ring/${stop ? 'stop' : 'snooze'}'));
+      await (await rq.close().timeout(const Duration(seconds: 3))).drain<void>();
+    } catch (_) {
+      // hassmic restarting: "<wake word>, stop" still works
+    } finally {
+      c.close(force: true);
+    }
+  }
   final _client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
 
   /// the config (null: hassmic not answering, or not to this app); front: the app is in front

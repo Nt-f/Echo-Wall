@@ -159,7 +159,9 @@ class _Ring extends StatelessWidget {
     final w = min(size.width * (round ? .66 : .62), 620.0);
     final radius = BorderRadius.circular(small ? 26 : 36);
     final icon = s.ringingAlarm ? CupertinoIcons.alarm_fill : CupertinoIcons.timer;
-    return Stack(fit: StackFit.expand, children: [
+    // a tap snoozes (an alarm; a timer stops), a hold stops: hassmic does it, this app having claimed the ring
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => Hassmic.ring(stop: false), onLongPress: () => Hassmic.ring(stop: true),
+        child: Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: Color(0x80000000)),
       Center(child: SizedBox(width: w, child: DecoratedBox(
         decoration: ShapeDecoration(shape: RoundedSuperellipseBorder(borderRadius: radius),
@@ -185,6 +187,6 @@ class _Ring extends StatelessWidget {
                   style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: small ? 12 : 15, fontWeight: FontWeight.w500)),
             ]))),
       ))),
-    ]);
+    ]));
   }
 }
