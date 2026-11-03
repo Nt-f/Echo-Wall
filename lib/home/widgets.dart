@@ -7,7 +7,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes;
+import 'package:flutter/foundation.dart' show ValueListenable, consolidateHttpClientResponseBytes;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -430,7 +430,11 @@ class CameraCard extends StatefulWidget {
 /// own still can fail where the stream works (measured: an ONVIF Uniview, HTTP 500 after HA's 10 s timeout, every time).
 class _CameraCardState extends State<CameraCard> {
   VideoPlayerController? _v;
+  final _shown = ValueNotifier<VideoPlayerController?>(null);   // the playing stream, for the full screen view
+  bool _full = false;                           // the full screen view is open: live whatever is under it
+  bool get _live => widget.live || _full;
   bool _streamFailed = false, _tooBig = false;
+  String _tooBigSize = '';                      // the stream's that the decoder refused: "2592 × 1520"
   int _try = 0;                                 // which of the camera's streams: the entity's, then its device's other cameras
   List<String> get _streams => [widget.id, ...widget.ha.sameDevice(widget.id).where((x) => x.startsWith('camera.') && widget.ha.states.containsKey(x))];
   int _gen = 0;
@@ -453,10 +457,10 @@ class _CameraCardState extends State<CameraCard> {
   void didUpdateWidget(CameraCard old) { super.didUpdateWidget(old); if (old.live != widget.live || old.id != widget.id) _follow(); }
 
   @override
-  void dispose() { _t?.cancel(); _http.close(force: true); _stop(); super.dispose(); }
+  void dispose() { _disposed = true; _t?.cancel(); _http.close(force: true); _stop(); _shown.dispose(); super.dispose(); }
 
   void _follow() {
-    if (widget.live && !_streamFailed) { _play(); } else { _stop(); }
+    if (_live && !_streamFailed) { _play(); } else { _stop(); }
     if (_v == null) _still();
   }
 
@@ -476,7 +480,11 @@ class _CameraCardState extends State<CameraCard> {
         debugPrint('camera $cam: stream $e');
         // more than the Show 5's decoder takes (measured: 2592 x 1520 H.264 level 5.0, an ONVIF camera's main
         // profile): the camera's other stream, its substream, where Home Assistant has it enabled
-        if (e.contains('EXCEEDS_CAPABILITIES')) _tooBig = true;
+        if (e.contains('EXCEEDS_CAPABILITIES')) {
+          _tooBig = true;
+          final m = RegExp(r'\[(\d+), (\d+),').firstMatch(e);
+          if (m != null) _tooBigSize = '${m[1]} × ${m[2]}';
+        }
         _next();
       }
     });
@@ -485,6 +493,7 @@ class _CameraCardState extends State<CameraCard> {
       await v.setVolume(0);
       await v.play();
       debugPrint('camera $cam: live, ${v.value.size.width.round()} x ${v.value.size.height.round()}');
+      if (_v == v) _shown.value = v;
     } catch (e) {
       if (_v == v) _next();
     }
@@ -499,7 +508,7 @@ class _CameraCardState extends State<CameraCard> {
       debugPrint('camera ${widget.id}: no stream plays here (of ${_streams.join(', ')})');
       _streamFailed = true;
       _still();
-    } else if (widget.live) {
+    } else if (_live) {
       _play();
     }
     if (mounted) setState(() {});
@@ -509,6 +518,7 @@ class _CameraCardState extends State<CameraCard> {
     _gen++;
     final v = _v;
     _v = null;
+    if (!_disposed) _shown.value = null;
     v?.dispose();
   }
 
@@ -541,14 +551,15 @@ class _CameraCardState extends State<CameraCard> {
     final live = v != null && v.value.isInitialized && v.value.size.width > 0;
     // no picture (Home Assistant could not get one from the camera): said so, on glass, instead of a black square
     final none = Glass(p: widget.p, cell: widget.cell, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Icon(CupertinoIcons.video_camera, size: 22 * u, color: widget.p.dim),
+      Icon(_overRes ? CupertinoIcons.exclamationmark_triangle : CupertinoIcons.video_camera, size: 22 * u, color: widget.p.dim),
       SizedBox(height: 3 * u),
-      Text(_v != null && !live ? 'Connecting…' : 'No picture', style: TextStyle(color: widget.p.dim, fontSize: max(10.0, 7.5 * u), fontWeight: FontWeight.w500)),
-      if (_tooBig && _streamFailed) Padding(padding: EdgeInsets.fromLTRB(8 * u, 2 * u, 8 * u, 0), child: Text(
-          'The stream is too big for this screen: enable the camera\'s substream in Home Assistant',
-          textAlign: TextAlign.center, maxLines: 3, style: TextStyle(color: widget.p.dim, fontSize: max(9.0, 5.2 * u)))),
+      Text(_v != null && !live ? 'Connecting…' : _overRes ? 'Resolution too high' : 'No picture',
+          style: TextStyle(color: widget.p.dim, fontSize: max(10.0, 7.5 * u), fontWeight: FontWeight.w600)),
+      if (_overRes) Padding(padding: EdgeInsets.fromLTRB(8 * u, 1.5 * u, 8 * u, 0), child: Text(
+          _tooBigSize.isEmpty ? 'Enable a substream' : '$_tooBigSize · enable a substream',
+          textAlign: TextAlign.center, maxLines: 2, style: TextStyle(color: widget.p.dim.withValues(alpha: .8), fontSize: max(9.0, 5.4 * u)))),
     ])));
-    return ClipRSuperellipse(borderRadius: BorderRadius.circular(min(30, widget.cell * .17)), child: Stack(fit: StackFit.expand, children: [
+    return GestureDetector(onTap: _open, child: ClipRSuperellipse(borderRadius: BorderRadius.circular(min(30, widget.cell * .17)), child: Stack(fit: StackFit.expand, children: [
       none,
       if (_jpg != null && !live) Image.memory(_jpg!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox()),
       if (live) FittedBox(fit: BoxFit.cover, clipBehavior: Clip.hardEdge,
@@ -559,7 +570,81 @@ class _CameraCardState extends State<CameraCard> {
           child: Text('LIVE', style: TextStyle(color: Colors.white, fontSize: max(9.0, 5.5 * u), fontWeight: FontWeight.w700, letterSpacing: .5)))),
       Positioned(left: 8 * u, bottom: 6 * u, right: 8 * u, child: Text(nameIn(widget.ha, widget.id, null), maxLines: 1, overflow: TextOverflow.ellipsis,
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: max(10, 9 * u), shadows: const [Shadow(blurRadius: 3)]))),
-    ]));
+    ])));
+  }
+
+  bool _disposed = false;
+
+  /// every stream of the camera refused by the Show 5's decoder as too big, and no still to show instead
+  bool get _overRes => _tooBig && _streamFailed && _v == null;
+
+  /// the camera full screen: the tile's own stream (no second one for the Show 5 to decode, and no wait), kept live
+  /// while it is open, the lock screen's time-out notwithstanding; a tap closes it
+  Future<void> _open() async {
+    setState(() => _full = true);
+    _follow();
+    await Navigator.of(context).push(PageRouteBuilder<void>(
+      opaque: true,
+      transitionDuration: const Duration(milliseconds: 220),
+      reverseTransitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (_, _, _) => CameraFullScreen(name: nameIn(widget.ha, widget.id, null), stream: _shown, still: () => _jpg,
+          tooBig: () => _overRes ? _tooBigSize : null),
+      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: ScaleTransition(
+          scale: Tween(begin: .94, end: 1.0).animate(CurvedAnimation(parent: a, curve: Curves.easeOut)), child: child)),
+    ));
+    if (!mounted) return;
+    setState(() => _full = false);
+    _follow();
+  }
+}
+
+class CameraFullScreen extends StatelessWidget {
+  final String name;
+  final ValueListenable<VideoPlayerController?> stream;
+  final Uint8List? Function() still;
+  final String? Function() tooBig;              // every stream refused by the decoder: the resolution ('' unknown)
+  const CameraFullScreen({super.key, required this.name, required this.stream, required this.still, required this.tooBig});
+  @override
+  Widget build(BuildContext context) {
+    void close() => Navigator.of(context).maybePop();
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: close,
+      onVerticalDragEnd: (d) { if ((d.primaryVelocity ?? 0) > 300) close(); },   // swiped down
+      child: Material(color: Colors.black, child: Stack(fit: StackFit.expand, children: [
+        ValueListenableBuilder(valueListenable: stream, builder: (_, v, _) {
+          if (v != null && v.value.isInitialized && v.value.size.width > 0) {
+            return Center(child: AspectRatio(aspectRatio: v.value.aspectRatio, child: VideoPlayer(v)));
+          }
+          final jpg = still();
+          if (jpg != null) return Image.memory(jpg, fit: BoxFit.contain, gaplessPlayback: true);
+          if (tooBig() case final size?) {
+            return Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520), child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(CupertinoIcons.exclamationmark_triangle, color: Color(0xffffd60a), size: 44),
+              const SizedBox(height: 14),
+              const Text('Resolution too high', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text('${size.isEmpty ? 'This camera\'s stream' : 'This camera\'s stream ($size)'} is more than this screen can play.\n'
+                  'In Home Assistant, enable a smaller stream of the camera (its substream): '
+                  'Settings › Devices › the camera › its disabled camera entities. It is used here by itself.',
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.4)),
+            ])));
+          }
+          return const Center(child: CupertinoActivityIndicator(color: Colors.white, radius: 16));
+        }),
+        Positioned(left: 20, top: 16, child: Row(children: [
+          Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, shadows: [Shadow(blurRadius: 4)])),
+          const SizedBox(width: 10),
+          ValueListenableBuilder(valueListenable: stream, builder: (_, v, _) => v == null ? const SizedBox() : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: const Color(0xccff3b30), borderRadius: BorderRadius.circular(4)),
+              child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: .5)))),
+        ])),
+        Positioned(right: 16, top: 12, child: GestureDetector(onTap: close, child: Container(width: 40, height: 40,
+            decoration: const BoxDecoration(color: Color(0x66000000), shape: BoxShape.circle),
+            child: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 20)))),
+      ])),
+    );
   }
 }
 
