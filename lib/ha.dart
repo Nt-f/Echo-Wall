@@ -172,6 +172,12 @@ class Ha extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// the other entities of an entity's device (a camera's other streams: an ONVIF camera has one entity per profile)
+  List<String> sameDevice(String id) {
+    final d = _entityDevice[id];
+    return d == null ? const [] : [for (final e in _entityDevice.entries) if (e.value == d && e.key != id) e.key];
+  }
+
   String? areaOf(String id) => _entityArea[id] ?? _deviceArea[_entityDevice[id] ?? ''];
   String areaName(String? id) => areas.firstWhere((a) => a.id == id, orElse: () => const Area('', '')).name;
 
@@ -181,6 +187,18 @@ class Ha extends ChangeNotifier {
 
   /// an image of Home Assistant's (a camera, a cover): the address, with the login as a header for Image.network
   Uri image(String path) => Uri.parse(_url).resolve(path);
+  /// a camera's live stream (HLS, the camera's own codec, so no transcoding on Home Assistant): its address, which
+  /// carries its own token; null where the camera has none or Home Assistant's stream integration failed
+  Future<Uri?> cameraStream(String id) async {
+    try {
+      final r = await send({'type': 'camera/stream', 'entity_id': id});
+      final url = (r as Map?)?['url'] as String?;
+      return url == null ? null : image(url);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Map<String, String> get authHeader => {'Authorization': 'Bearer $_token'};
 }
 

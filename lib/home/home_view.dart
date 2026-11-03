@@ -376,7 +376,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       Kind.date => Press(onTap: () => showWeather(context, ha, p, backdrop), child: DateWeatherCard(ha: ha, p: p, cell: cell)),
       Kind.thermo => ThermostatCard(ha: ha, p: p, id: it.id!, cell: cell, onLong: more),
       Kind.playing => NowPlayingCard(ha: ha, p: p, id: it.id!, cell: cell, size: it.size, onLong: more),
-      Kind.camera => CameraCard(ha: ha, p: p, id: it.id!, cell: cell),
+      Kind.camera => CameraCard(ha: ha, p: p, id: it.id!, cell: cell, live: !ambient && !editing),
       Kind.screen => ScreenTile(p: p, name: it.name, cell: cell, onTap: () => widget.onScreen(it.screen)),
       Kind.tile => AccessoryTile(ha: ha, p: p, id: it.id!, room: it.room, cell: cell, onLong: more),
     };

@@ -194,6 +194,7 @@ class _Card extends StatelessWidget {
               Expanded(child: CupertinoSlider(value: vol / 100, activeColor: Colors.white, thumbColor: Colors.white,
                   onChanged: (x) => _throttled('vol$id', () => ha.call(d, 'volume_set', id, {'volume_level': x})))),
             ])),
+            if (_groups(st)) Padding(padding: const EdgeInsets.only(top: 14), child: _Speakers(ha: ha, id: id, fg: fg)),
           ]),
         ]);
     }
@@ -303,6 +304,56 @@ class RoundButton extends StatelessWidget {
             child: Icon(icon, size: size * .42, color: fg))),
         if (label != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(label!, style: TextStyle(color: fg.withValues(alpha: .6), fontSize: 12))),
       ]);
+}
+
+/// a player that can play in a group with others (Home Assistant's MediaPlayerEntityFeature.GROUPING: Music
+/// Assistant's, Sonos, ...)
+bool _groups(EntityState st) => ((st.numAttr('supported_features') ?? 0).toInt() & 524288) != 0;
+
+/// the speakers playing along: a dropdown of every player that can join this one, ticked where it is in its group
+/// (media_player.join / unjoin); it stays open to tick several
+class _Speakers extends StatelessWidget {
+  final Ha ha;
+  final String id;
+  final Color fg;
+  const _Speakers({required this.ha, required this.id, required this.fg});
+  @override
+  Widget build(BuildContext context) {
+    final members = ((ha.states[id]?.attr['group_members'] as List?) ?? const []).cast<String>().where((m) => m != id).toList();
+    final others = ha.states.keys.where((x) => x != id && domainOf(x) == 'media_player' && _groups(ha.states[x]!)
+        && ha.states[x]!.state != 'unavailable').toList()
+      ..sort((a, b) => nameIn(ha, a, null).compareTo(nameIn(ha, b, null)));
+    return MenuAnchor(
+      style: MenuStyle(backgroundColor: const WidgetStatePropertyAll(Color(0xf02c2c2e)),
+          shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))),
+      menuChildren: [
+        if (others.isEmpty) const Padding(padding: EdgeInsets.all(14), child: Text('No other speakers can join', style: TextStyle(color: Colors.white70))),
+        for (final x in others)
+          CheckboxMenuButton(
+            value: members.contains(x),
+            closeOnActivate: false,
+            onChanged: (on) => on == true ? ha.call('media_player', 'join', id, {'group_members': [x]}) : ha.call('media_player', 'unjoin', x),
+            child: Padding(padding: const EdgeInsets.only(right: 12),
+                child: Text(nameIn(ha, x, null), style: const TextStyle(color: Colors.white, fontSize: 16))),
+          ),
+      ],
+      builder: (context, menu, _) => GestureDetector(
+        onTap: () => menu.isOpen ? menu.close() : menu.open(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: fg.withValues(alpha: .14), borderRadius: BorderRadius.circular(999)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(CupertinoIcons.speaker_2_fill, color: fg, size: 16),
+            const SizedBox(width: 8),
+            Text(members.isEmpty ? 'Speakers' : '+ ${members.length} speaker${members.length == 1 ? '' : 's'}',
+                style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            Icon(CupertinoIcons.chevron_down, color: fg.withValues(alpha: .7), size: 14),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 class _Climate extends StatefulWidget {

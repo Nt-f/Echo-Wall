@@ -2,10 +2,14 @@
 // the cell (`u`: a hundredth of a cell's side), so a tile reads the same on a Show 5's 139 px cells and a Show 15's.
 // The glass is Apple's material: the wallpaper behind it blurred once and drawn piece by piece (backdrop.dart).
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes;
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 import '../echo_ui.dart' show Ticker, clockText, ampm;
 import '../ha.dart';
@@ -415,32 +419,144 @@ class CameraCard extends StatefulWidget {
   final Palette p;
   final String id;
   final double cell;
-  const CameraCard({super.key, required this.ha, required this.p, required this.id, required this.cell});
+  final bool live;                              // on screen and seen (not under the lock screen, not in edit mode)
+  const CameraCard({super.key, required this.ha, required this.p, required this.id, required this.cell, this.live = true});
   @override
   State<CameraCard> createState() => _CameraCardState();
 }
 
+/// The camera, live: Home Assistant's HLS stream of it (the entity's profile: an ONVIF camera's second is its substream,
+/// small for the Show 5's decoder), muted, only while the card is seen.  Without a stream, stills; Home Assistant's
+/// own still can fail where the stream works (measured: an ONVIF Uniview, HTTP 500 after HA's 10 s timeout, every time).
 class _CameraCardState extends State<CameraCard> {
+  VideoPlayerController? _v;
+  bool _streamFailed = false, _tooBig = false;
+  int _try = 0;                                 // which of the camera's streams: the entity's, then its device's other cameras
+  List<String> get _streams => [widget.id, ...widget.ha.sameDevice(widget.id).where((x) => x.startsWith('camera.') && widget.ha.states.containsKey(x))];
+  int _gen = 0;
+  // the still, fetched here rather than by Image.network: one request at a time (a still taken from the stream by
+  // ffmpeg takes seconds; requests every 10 s would pile up behind it), less often once it failed, what went wrong logged
   Timer? _t;
-  int n = 0;
+  Uint8List? _jpg;
+  bool _busy = false;
+  int _fails = 0;
+  final _http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+
   @override
-  void initState() { super.initState(); _t = Timer.periodic(const Duration(seconds: 10), (_) { if (mounted) setState(() => n++); }); }
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 10), (t) { if (_fails < 3 || t.tick % 6 == 0) _still(); });
+    _follow();
+  }
+
   @override
-  void dispose() { _t?.cancel(); super.dispose(); }
+  void didUpdateWidget(CameraCard old) { super.didUpdateWidget(old); if (old.live != widget.live || old.id != widget.id) _follow(); }
+
+  @override
+  void dispose() { _t?.cancel(); _http.close(force: true); _stop(); super.dispose(); }
+
+  void _follow() {
+    if (widget.live && !_streamFailed) { _play(); } else { _stop(); }
+    if (_v == null) _still();
+  }
+
+  Future<void> _play() async {
+    if (_v != null) return;
+    final gen = ++_gen, streams = _streams;
+    if (_try >= streams.length) { _streamFailed = true; _still(); return; }
+    final cam = streams[_try];
+    final url = await widget.ha.cameraStream(cam);
+    if (gen != _gen || !mounted) return;
+    if (url == null) { debugPrint('camera $cam: no stream'); _next(); return; }
+    final v = VideoPlayerController.networkUrl(url, formatHint: VideoFormat.hls, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
+    _v = v;
+    v.addListener(() {
+      if (v.value.hasError && _v == v) {
+        final e = v.value.errorDescription ?? '';
+        debugPrint('camera $cam: stream $e');
+        // more than the Show 5's decoder takes (measured: 2592 x 1520 H.264 level 5.0, an ONVIF camera's main
+        // profile): the camera's other stream, its substream, where Home Assistant has it enabled
+        if (e.contains('EXCEEDS_CAPABILITIES')) _tooBig = true;
+        _next();
+      }
+    });
+    try {
+      await v.initialize();
+      await v.setVolume(0);
+      await v.play();
+      debugPrint('camera $cam: live, ${v.value.size.width.round()} x ${v.value.size.height.round()}');
+    } catch (e) {
+      if (_v == v) _next();
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// this stream did not play: the next of the camera's, else stills
+  void _next() {
+    _stop();
+    _try++;
+    if (_try >= _streams.length) {
+      debugPrint('camera ${widget.id}: no stream plays here (of ${_streams.join(', ')})');
+      _streamFailed = true;
+      _still();
+    } else if (widget.live) {
+      _play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _stop() {
+    _gen++;
+    final v = _v;
+    _v = null;
+    v?.dispose();
+  }
+
+  Future<void> _still() async {
+    final pic = widget.ha.states[widget.id]?.attr['entity_picture'] as String?;
+    if (_busy || pic == null || (_v?.value.isInitialized ?? false) || !mounted) return;
+    _busy = true;
+    final sw = Stopwatch()..start();
+    try {
+      final rq = await _http.getUrl(widget.ha.image(pic));
+      widget.ha.authHeader.forEach(rq.headers.set);
+      final rs = await rq.close().timeout(const Duration(seconds: 30));
+      final bytes = await consolidateHttpClientResponseBytes(rs);
+      if (rs.statusCode == 200) {
+        _fails = 0;
+        if (mounted) setState(() => _jpg = bytes);
+      } else {
+        if (_fails++ == 0) debugPrint('camera ${widget.id}: still: HTTP ${rs.statusCode} after ${sw.elapsedMilliseconds} ms');
+      }
+    } catch (e) {
+      if (_fails++ == 0) debugPrint('camera ${widget.id}: still: $e after ${sw.elapsedMilliseconds} ms');
+    } finally {
+      _busy = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final st = widget.ha.states[widget.id], u = widget.cell / 100;
-    final pic = st?.attr['entity_picture'] as String?;
+    final u = widget.cell / 100, v = _v;
+    final live = v != null && v.value.isInitialized && v.value.size.width > 0;
     // no picture (Home Assistant could not get one from the camera): said so, on glass, instead of a black square
     final none = Glass(p: widget.p, cell: widget.cell, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(CupertinoIcons.video_camera, size: 22 * u, color: widget.p.dim),
       SizedBox(height: 3 * u),
-      Text('No picture', style: TextStyle(color: widget.p.dim, fontSize: max(10.0, 7.5 * u), fontWeight: FontWeight.w500)),
+      Text(_v != null && !live ? 'Connecting…' : 'No picture', style: TextStyle(color: widget.p.dim, fontSize: max(10.0, 7.5 * u), fontWeight: FontWeight.w500)),
+      if (_tooBig && _streamFailed) Padding(padding: EdgeInsets.fromLTRB(8 * u, 2 * u, 8 * u, 0), child: Text(
+          'The stream is too big for this screen: enable the camera\'s substream in Home Assistant',
+          textAlign: TextAlign.center, maxLines: 3, style: TextStyle(color: widget.p.dim, fontSize: max(9.0, 5.2 * u)))),
     ])));
     return ClipRSuperellipse(borderRadius: BorderRadius.circular(min(30, widget.cell * .17)), child: Stack(fit: StackFit.expand, children: [
       none,
-      if (pic != null) Image.network('${widget.ha.image(pic)}&t=$n', headers: widget.ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
-          errorBuilder: (_, _, _) => const SizedBox()),
+      if (_jpg != null && !live) Image.memory(_jpg!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox()),
+      if (live) FittedBox(fit: BoxFit.cover, clipBehavior: Clip.hardEdge,
+          child: SizedBox(width: v.value.size.width, height: v.value.size.height, child: VideoPlayer(v))),
+      if (live) Positioned(top: 7 * u, right: 8 * u, child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 4 * u, vertical: 1.5 * u),
+          decoration: BoxDecoration(color: const Color(0xccff3b30), borderRadius: BorderRadius.circular(4 * u)),
+          child: Text('LIVE', style: TextStyle(color: Colors.white, fontSize: max(9.0, 5.5 * u), fontWeight: FontWeight.w700, letterSpacing: .5)))),
       Positioned(left: 8 * u, bottom: 6 * u, right: 8 * u, child: Text(nameIn(widget.ha, widget.id, null), maxLines: 1, overflow: TextOverflow.ellipsis,
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: max(10, 9 * u), shadows: const [Shadow(blurRadius: 3)]))),
     ]));
