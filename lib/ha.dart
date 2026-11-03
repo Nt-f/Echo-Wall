@@ -4,7 +4,7 @@
 // every change (a ChangeNotifier), the widgets ask for what they show.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'io/io.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -39,6 +39,18 @@ class Ha extends ChangeNotifier {
 
   String get url => _url;
   String get token => _token;
+
+  /// called at every login (the first and each after a dropped link): who follows something of Home Assistant's
+  /// subscribes again there (subscriptions end with the link)
+  final onConnected = <void Function()>[];
+
+  /// a new access token when Home Assistant refuses the one held (lib/login.dart: tokens of its own login last 30
+  /// minutes; an Echo's long-lived one has none of this)
+  Future<String?> Function()? renew;
+  bool _renewing = false;
+
+  /// the same login, a fresh access token: for the next connect and every request (cameras), the link left as it is
+  void freshToken(String token) => _token = token;
 
   /// (re)connects when the address or the token changed
   void configure(String url, String token) {
@@ -88,7 +100,18 @@ class Ha extends ChangeNotifier {
       case 'auth_required':
         _ws?.add(jsonEncode({'type': 'auth', 'access_token': _token}));
       case 'auth_invalid':
-        error = 'Home Assistant refused the login: set the screen up again from the Echo Local integration';
+        final r = renew;
+        if (r != null && !_renewing) {
+          _renewing = true;
+          r().then((t) {
+            _renewing = false;
+            if (t != null && t.isNotEmpty) { _token = t; _close(); _connect(); return; }
+            error = 'Home Assistant refused the login: log in again';
+            notifyListeners();
+          });
+          return;
+        }
+        error = 'Home Assistant refused the login: set the screen up again (Echo Local, or the app\'s own login)';
         notifyListeners();
       case 'auth_ok':
         connected = true; error = null;
@@ -121,6 +144,7 @@ class Ha extends ChangeNotifier {
   }
 
   Future<void> _started() async {
+    for (final f in onConnected) { f(); }
     subscribe({'type': 'subscribe_entities'}, _entities).catchError((_) {});
     await _registries().catchError((_) {});
     for (final t in ['area_registry_updated', 'entity_registry_updated', 'device_registry_updated']) {
@@ -133,10 +157,21 @@ class Ha extends ChangeNotifier {
   }
 
   /// the compressed states: a = whole states, c = changes ("+" set, "-" removed attributes), r = removed entities
+  /// when each player last stopped sounding (paused, stopped, or AirPlay's pause: muted here): the lock screen shows a
+  /// paused one for a while only (lock_screen.dart).  From Home Assistant's last_changed for what was quiet already
+  final quietSince = <String, DateTime>{};
+  void _quiet(String id, {num? since}) {
+    if (!id.startsWith('media_player.')) return;
+    if (sounding(id)) { quietSince.remove(id); return; }
+    quietSince.putIfAbsent(id, () => since != null ? DateTime.fromMillisecondsSinceEpoch((since * 1000).round()) : DateTime.now());
+  }
+
   void _entities(dynamic ev) {
     final e = ev as Map<String, dynamic>;
     (e['a'] as Map<String, dynamic>?)?.forEach((id, v) {
       states[id] = EntityState('${v['s']}', Map<String, dynamic>.from(v['a'] as Map? ?? {}));
+      quietSince.remove(id);
+      _quiet(id, since: v['lc'] as num?);
     });
     (e['c'] as Map<String, dynamic>?)?.forEach((id, d) {
       final st = states[id];
@@ -147,6 +182,7 @@ class Ha extends ChangeNotifier {
         (plus['a'] as Map<String, dynamic>?)?.forEach((k, v) => st.attr[k] = v);
       }
       for (final k in (minus?['a'] as List? ?? const [])) { st.attr.remove(k); }
+      _quiet(id);
     });
     for (final id in (e['r'] as List? ?? const [])) { states.remove(id); }
     if (_held.isNotEmpty) _release();
@@ -180,6 +216,9 @@ class Ha extends ChangeNotifier {
   }
 
   String? areaOf(String id) => _entityArea[id] ?? _deviceArea[_entityDevice[id] ?? ''];
+  /// an entity put in an area, as the registries would (tests)
+  @visibleForTesting
+  void putInArea(String id, String area) => _entityArea[id] = area;
   String areaName(String? id) => areas.firstWhere((a) => a.id == id, orElse: () => const Area('', '')).name;
 
   Future<void> call(String domain, String service, String entity, [Map<String, dynamic> data = const {}]) =>

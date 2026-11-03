@@ -1,5 +1,7 @@
 // How a tile answers a finger, as Apple's do: it gives a little under the finger (scaled to 96 %, quickly) and springs
-// back when let go; no ripple, no highlight.  A long press is the way into its detail (detail.dart).
+// back when let go; no ripple, no highlight.  A long press is the way into its detail (detail.dart) where the tile has
+// one to give; without onLongPress it claims no long press, so that the WallView's own (the card's menu, the edit mode)
+// gets it.
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
@@ -34,9 +36,9 @@ class _PressState extends State<Press> with SingleTickerProviderStateMixin {
         onTapUp: (_) => _to(1, spring: true),
         onTapCancel: () => _to(1, spring: true),
         onTap: widget.onTap,
-        onLongPressStart: (_) => _to(1 - widget.depth * 1.6),
-        onLongPress: () { _to(1, spring: true); widget.onLongPress?.call(); },
-        onLongPressEnd: (_) => _to(1, spring: true),
+        onLongPressStart: widget.onLongPress == null ? null : (_) => _to(1 - widget.depth * 1.6),
+        onLongPress: widget.onLongPress == null ? null : () { _to(1, spring: true); widget.onLongPress?.call(); },
+        onLongPressEnd: widget.onLongPress == null ? null : (_) => _to(1, spring: true),
         child: AnimatedBuilder(animation: c, builder: (_, child) => Transform.scale(scale: c.value, child: child), child: widget.child),
       );
 }

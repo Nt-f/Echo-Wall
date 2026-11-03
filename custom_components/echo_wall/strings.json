@@ -1,0 +1,11 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Echo-Wall",
+        "description": "Adds the Echo-Wall panel to the sidebar, where every device running the Echo-Wall app gets its home screen arranged. A device appears there by itself once its app has logged in to this Home Assistant."
+      }
+    },
+    "abort": { "single_instance_allowed": "Echo-Wall is set up already." }
+  }
+}

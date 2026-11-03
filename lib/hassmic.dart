@@ -4,7 +4,7 @@
 // clock itself) and every 30 s while paused ("/back": alive, not to be started).
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'io/io.dart';
 
 class Screen {
   final String name, url;
@@ -23,6 +23,10 @@ class ScreenConfig {
   /// the app's own settings, typed into the integration's options ("Screen app settings": key=value lines)
   final Map<String, String> settings;
   ScreenConfig._(this.raw, this.enabled, this.ha, this.token, this.screens, this.defaultScreen, this.returnSeconds, this.settings);
+
+  /// a device without hassmic: Home Assistant logged in by the app itself (lib/login.dart), Home only, never back
+  factory ScreenConfig.standalone(String ha, String token) =>
+      ScreenConfig._('standalone $ha', true, ha, token, const [], 0, 0, const {});
 
   factory ScreenConfig.parse(String raw) {
     final j = jsonDecode(raw) as Map<String, dynamic>;

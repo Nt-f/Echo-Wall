@@ -1,13 +1,32 @@
 # Echo-Wall
 
-Home Assistant on an Amazon Echo Show running [hassmic](https://github.com/Nt-f/echo-dot-assist), in the manner of
-Apple's HomeView: frosted-glass widgets over a photo, a page per room, a lock screen of photos the clock finds room on.
+Home Assistant on an Android screen (an Amazon Echo Show running [hassmic](https://github.com/Nt-f/echo-dot-assist), or
+any tablet), in the manner of Apple's HomeView: frosted-glass widgets over a photo, a page per room, a lock screen of photos the clock finds room on.
 A fork of [Echo-Screen](https://github.com/Nt-f/Echo-Screen), the screen app template (its contract with
 hassmic, its web screens, its keyboard, hassmic's clock, words and alarms drawn in the app's look); merge its `main`
 for its fixes.
 
 <img src="docs/screenshots/show5-home.png" width="480"> <img src="docs/screenshots/show5-controls.png" width="480">
 <img src="docs/screenshots/show5-lock.png" width="480"> <img src="docs/screenshots/show5-edit.png" width="480">
+
+## Install
+
+1. **The integration** (arranges every device's home screen from Home Assistant's sidebar): HACS › Integrations ›
+   ⋮ › Custom repositories › `https://github.com/Nt-f/Echo-Wall`, category Integration; install "Echo-Wall", restart
+   Home Assistant, then Settings › Devices & services › Add integration › Echo-Wall. A panel "Echo-Wall" appears in the
+   sidebar (administrators only).
+2. **The app** (`flutter build apk --release`, or a release's APK; on an Echo Show `--target-platform android-arm`):
+   - **On an Echo Show with hassmic**: install it, then in Home Assistant: Echo Local › the Echo › Screen › App:
+     Echo-Wall. hassmic gives it Home Assistant's address and the Echo's own login; the Echo's alarms, the voice
+     assistant's words and rings show on its glass.
+   - **On a tablet**: install it and open it: with no hassmic there it asks for Home Assistant's address and shows Home
+     Assistant's own login page. Log in with a user of its own (Settings › People: a user that is no administrator is
+     best). Make it the home app if it is to be the tablet's screen.
+3. The device appears in the Echo-Wall panel by itself. Arrange it there (beside the app itself running in the page) or
+   on the device (hold a card, or the page dots). Each login sees only its own devices; the panel all of them.
+
+[docs/integration.md](docs/integration.md) has the design: devices, logins, the websocket commands, the panel, the
+preview, export and import.
 
 ## What it shows
 
@@ -20,8 +39,18 @@ for its fixes.
 - **The detail**: the tile grows into a card while the WallView dims behind it: Apple's tall pill for brightness,
   position and speed, live while you drag (a light's colours and whites as circles beside it); a thermostat's temperature big with − and + and its modes; one big round
   button for a switch or a lock; a speaker's artwork, buttons and volume. Swipe it down or tap beside it to close.
-- **Editing**: hold the page dots. The widgets wobble; drag one to move it, ★ puts it on Home, − hides it; the bar picks
-  the wallpaper (a photo, or amber, dusk, light) and lists what is hidden.
+- **Editing**: hold the page dots (or any card, on past its menu). The widgets wobble; drag one to move it (held at the
+  screen's edge, onto another page, room or Home), ⤡ resizes it in place, ★ puts it on Home, − hides it; the bar picks
+  the wallpaper (a photo, or amber, dusk, light) and lists what is hidden. The layout is kept in Home Assistant too
+  (with the Echo Local integration): its sidebar panel "Echo Local" edits it, exports it to a file, imports it (also
+  from the wall panel's Home) and copies it to other Echos; a save there shows here at once
+  (`lib/home/layout_sync.dart`; echo-dot-assist's `docs/home-screens.md`).
+- **Your dashboard**: pick one of your Home Assistant dashboards in Echo Local and its sections become pages after
+  Home, drawn here in glass (tiles, thermostats, players, cameras, entities, glance, weather; other cards open the
+  dashboard). Changes in Home Assistant show at once. Hold a card for its menu (controls, sizes, move, remove); hold on
+  to edit. What you change on the Echo stays in the app's layout, never in the dashboard.
+- **Every card in the sizes that suit it**: small, wide, large, extra large (`lib/home/sizes.dart`);
+  `test/gallery_test.dart` draws every one at every size and fails on an overflow (`test/goldens/cards.png`).
 - **Categories**, as Apple's Home has them: beside Home's title, Lights, Climate, Security and Speakers say what they
   are doing; a tap shows just those devices on a sheet of glass (lights: "All off"). A room's lights the same way.
 - **The forecast**: a tap on the date and weather shows today big and the next days (Home Assistant's
@@ -35,7 +64,8 @@ for its fixes.
 
 ## Photos from Immich
 
-In Home Assistant: Echo Local › Configure on the Echo Show › "Screen app settings", one per line:
+In Home Assistant's Echo-Wall panel: the device › Photos (the address, an API key, an album, how often). On an Echo
+Show, Echo Local's "Screen app settings" work too (the panel's win where both are set), one per line:
 
 ```
 immich.url=http://192.168.1.20:2283
@@ -81,8 +111,15 @@ demo integration's made-up home; only the Echo Show 5 has run it for real.
 
 ## Build and install
 
-Flutter 3.41.2. `flutter build apk --release --target-platform android-arm`, `adb install` it, and in Home Assistant:
-Echo Local › Configure on the Echo › "Screen app": `io.github.nt_f.echowall`.
+Flutter 3.41.2. `flutter build apk --release` (an Echo Show: `--target-platform android-arm`), `adb install` it.
+`flutter test` runs the app's tests (every card at every size: `test/gallery_test.dart`).
+
+The integration is `custom_components/echo_wall/` (`hacs.json` at the top makes the repository HACS's). The same
+WallView also runs in Home Assistant, as the panel's preview: `lib/preview.dart` built for the web (`web/`; the app's
+files import `lib/io/io.dart`, which is `dart:io` on a device and stand-ins over the browser's fetch and WebSocket on
+the web). `tools/preview.sh` builds it into `custom_components/echo_wall/frontend/preview/`; rerun it after a change to
+the WallView and commit the result with it. `tools/ha_test.py` tests the integration and the panel in a real Home
+Assistant (echo-dot-assist's `build/ha-venv`, or `ECHO_WALL_HA_PYTHON`).
 
 ## Credits
 

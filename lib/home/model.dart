@@ -94,6 +94,18 @@ Look look(Ha ha, String id) {
       return const Look(false, Icons.auto_awesome, purple, 'Scene');
     case 'script':
       return const Look(false, Icons.auto_awesome, purple, 'Shortcut');
+    case 'sensor':
+      // a reading (a dashboard's tile or glance of it): its value and unit, an icon for what it measures
+      final dc = '${a['device_class'] ?? ''}', unit = a['unit_of_measurement'];
+      final icon = switch (dc) {
+        'temperature' => Icons.thermostat, 'humidity' || 'moisture' => Icons.water_drop, 'carbon_dioxide' || 'carbon_monoxide' => Icons.co2,
+        'power' || 'energy' || 'current' || 'voltage' => Icons.bolt, 'battery' => Icons.battery_std, 'illuminance' => Icons.light_mode,
+        'pressure' => Icons.speed, 'gas' => Icons.local_fire_department, 'timestamp' => Icons.schedule, 'pm25' || 'pm10' || 'aqi' => Icons.air,
+        _ => Icons.sensors,
+      };
+      final num? v = num.tryParse(s);
+      final shown = v == null ? s : (v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(v.abs() < 10 ? 1 : 0));
+      return Look(false, icon, blue, unav ? 'No response' : unit != null ? '$shown $unit' : shown, unavailable: unav);
   }
   return Look(s == 'on', Icons.circle_outlined, amber, s, unavailable: unav);
 }

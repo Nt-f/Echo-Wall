@@ -2,12 +2,12 @@
 // the cell (`u`: a hundredth of a cell's side), so a tile reads the same on a Show 5's 139 px cells and a Show 15's.
 // The glass is Apple's material: the wallpaper behind it blurred once and drawn piece by piece (backdrop.dart).
 import 'dart:async';
-import 'dart:io';
+import '../io/io.dart';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show ValueListenable, consolidateHttpClientResponseBytes;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -17,6 +17,7 @@ import 'backdrop.dart';
 import 'layout.dart';
 import 'model.dart';
 import 'press.dart';
+import 'sizes.dart';
 import 'sheets.dart' show weatherIcon, weatherText;
 
 class Palette {
@@ -150,36 +151,47 @@ class AccessoryTile extends StatelessWidget {
   final String? room;                           // shown under the name (Home), else its state
   final double cell;
   final VoidCallback onLong;
-  const AccessoryTile({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong, this.room});
+  final bool holdOpens;                         // a long press opens the detail (the category sheets); the WallView's own hold is its menu
+  final CardSize size;                          // s: Apple's tile; m: the badge beside the words; l: all of it bigger, a level bar
+  const AccessoryTile({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong, this.room,
+      this.holdOpens = true, this.size = CardSize.s});
   @override
   Widget build(BuildContext context) {
     final l = look(ha, id), u = cell / 100;
     final fg = l.on ? p.textOn : p.text, dim = l.on ? p.dimOn : p.dim;
     final name = nameIn(ha, id, room ?? ha.areaName(ha.areaOf(id)));
-    final badge = 26 * u;
+    final big = size == CardSize.l || size == CardSize.xl, wide = size == CardSize.m;
+    final badge = (big ? 40 : wide ? 32 : 26) * u;
+    final circle = AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      width: badge, height: badge,
+      decoration: BoxDecoration(shape: BoxShape.circle,
+          color: l.on ? l.color.withValues(alpha: .2) : (p.text == Colors.white ? const Color(0x24ffffff) : const Color(0x14000000))),
+      child: Icon(l.icon, size: badge * .56, color: l.on ? l.color : fg),
+    );
+    final words = [
+      Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: max(12.0, (big ? 13 : wide ? 10 : 9) * u), height: 1.15)),
+      SizedBox(height: 1.5 * u),
+      Text(room != null && !l.unavailable ? room! : l.text, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: dim, fontSize: max(11.0, (big ? 10 : 7.8) * u), fontWeight: FontWeight.w500)),
+    ];
+    final Widget body = wide
+        ? Row(children: [circle, SizedBox(width: 10 * u),
+            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: words))])
+        : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            circle,
+            const Spacer(),
+            ...words,
+            if (big && l.level != null) Padding(padding: EdgeInsets.only(top: 6 * u), child: ClipRRect(borderRadius: BorderRadius.circular(3 * u),
+                child: LinearProgressIndicator(value: l.level, minHeight: 5 * u, color: l.color, backgroundColor: dim.withValues(alpha: .25)))),
+          ]);
     return Press(
       onTap: () { if (!tap(ha, id)) onLong(); },
-      onLongPress: onLong,
+      onLongPress: holdOpens ? onLong : null,
       child: Opacity(
         opacity: l.unavailable ? .5 : 1,
-        child: Hero(tag: 'tile/$id', child: Glass(p: p, cell: cell, on: l.on, padding: EdgeInsets.all(10 * u), child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              width: badge, height: badge,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                  color: l.on ? l.color.withValues(alpha: .2) : (p.text == Colors.white ? const Color(0x24ffffff) : const Color(0x14000000))),
-              child: Icon(l.icon, size: badge * .56, color: l.on ? l.color : fg),
-            ),
-            const Spacer(),
-            Text(name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: max(12.0, 9 * u), height: 1.15)),
-            SizedBox(height: 1.5 * u),
-            Text(room != null && !l.unavailable ? room! : l.text, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: dim, fontSize: max(11.0, 7.8 * u), fontWeight: FontWeight.w500)),
-          ],
-        ))),
+        child: Hero(tag: 'tile/$id', child: Glass(p: p, cell: cell, on: l.on, padding: EdgeInsets.all((big ? 14 : 10) * u), child: body)),
       ),
     );
   }
@@ -192,72 +204,164 @@ class ThermostatCard extends StatefulWidget {
   final String id;
   final double cell;
   final VoidCallback onLong;
-  const ThermostatCard({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong});
+  final bool holdOpens;
+  final CardSize size;                          // l: Apple's thermostat; s: the same in a cell; m: the number beside the words
+  const ThermostatCard({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong,
+      this.holdOpens = true, this.size = CardSize.l});
   @override
   State<ThermostatCard> createState() => _ThermostatCardState();
 }
 
+/// a thermostat's colours, as Apple's Home and Home Assistant's card have them: orange heating, blue cooling
+const heatColor = Color(0xffff9f0a), coolColor = Color(0xff0a84ff), dryColor = Color(0xffffd60a), fanColor = Color(0xff30d158);
+
 class _ThermostatCardState extends State<ThermostatCard> {
-  double? want;
+  double? want, wantLo, wantHi;
   Timer? _send;
+
+  /// a step up or down: the one set temperature, or in heat_cool both ends of the range together
   void nudge(int d) {
     final st = widget.ha.states[widget.id];
     if (st == null) return;
     final step = (st.numAttr('target_temp_step') ?? (st.attr['temperature_unit'] == '°F' ? 1 : .5)).toDouble();
-    final cur = want ?? (st.numAttr('temperature') ?? 20).toDouble();
     final lo = (st.numAttr('min_temp') ?? -100).toDouble(), hi = (st.numAttr('max_temp') ?? 100).toDouble();
-    setState(() => want = (((cur + d * step) / step).round() * step).clamp(lo, hi).toDouble());
+    double moved(double v) => (((v + d * step) / step).round() * step).clamp(lo, hi).toDouble();
+    final dual = st.numAttr('temperature') == null && st.numAttr('target_temp_low') != null && st.numAttr('target_temp_high') != null;
+    setState(() {
+      if (dual) {
+        wantLo = moved(wantLo ?? st.numAttr('target_temp_low')!.toDouble());
+        wantHi = moved(wantHi ?? st.numAttr('target_temp_high')!.toDouble());
+      } else {
+        want = moved(want ?? (st.numAttr('temperature') ?? 20).toDouble());
+      }
+    });
     _send?.cancel();
     _send = Timer(const Duration(milliseconds: 800), () {
-      widget.ha.call('climate', 'set_temperature', widget.id, {'temperature': want});
-      Timer(const Duration(seconds: 3), () { if (mounted) setState(() => want = null); });
+      widget.ha.call('climate', 'set_temperature', widget.id,
+          dual ? {'target_temp_low': wantLo, 'target_temp_high': wantHi} : {'temperature': want});
+      Timer(const Duration(seconds: 3), () { if (mounted) setState(() => want = wantLo = wantHi = null); });
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final st = widget.ha.states[widget.id], p = widget.p, u = widget.cell * 2.07 / 100;
+    final st = widget.ha.states[widget.id], p = widget.p;
+    final big = widget.size == CardSize.l || widget.size == CardSize.xl;
+    final u = widget.cell * (big ? 2.07 : widget.size == CardSize.m ? 1.15 : 1) / 100;
+    String n(num v) => v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(1);
     final t = want ?? st?.numAttr('temperature');
-    final txt = t == null ? '—' : (t % 1 == 0 ? t.toInt().toString() : t.toStringAsFixed(1));
-    final parts = txt.split('.');
-    final room = widget.ha.areaName(widget.ha.areaOf(widget.id));
+    // heat_cool (an Ecobee's auto): no one temperature but a range, its low end the heating's, its high the cooling's
+    final lo = wantLo ?? st?.numAttr('target_temp_low'), hi = wantHi ?? st?.numAttr('target_temp_high');
+    final dual = t == null && lo != null && hi != null;
+    final mode = st?.state ?? '', action = '${st?.attr['hvac_action'] ?? ''}';
+    // what it is doing (hvac_action), else what it is set to do: the card's colour and its line
+    final accent = switch (action) {
+      'heating' || 'preheating' => heatColor,
+      'cooling' => coolColor,
+      'drying' => dryColor,
+      'fan' => fanColor,
+      '' => switch (mode) { 'heat' => heatColor, 'cool' => coolColor, _ => null },
+      _ => null,
+    };
+    final active = const {'heating', 'preheating', 'cooling', 'drying', 'fan'}.contains(action) || (action.isEmpty && accent != null);
+    final setTo = dual ? (action == 'cooling' ? hi : lo) : t;
+    final line = switch (action) {
+      'heating' || 'preheating' => setTo != null ? 'Heating to ${n(setTo)}°' : 'Heating',
+      'cooling' => setTo != null ? 'Cooling to ${n(setTo)}°' : 'Cooling',
+      'drying' => 'Drying',
+      'fan' => 'Fan',
+      'idle' => 'Idle',
+      'off' => 'Off',
+      _ => switch (mode) {
+          'heat' => 'Heat', 'cool' => 'Cool', 'heat_cool' => 'Heat · Cool', 'auto' => 'Auto', 'dry' => 'Dry', 'fan_only' => 'Fan', 'off' => 'Off',
+          _ => mode,
+        },
+    };
     final cur = st?.numAttr('current_temperature');
+    final room = widget.ha.areaName(widget.ha.areaOf(widget.id));
+    final off = mode == 'off';
+    Widget chevron(IconData i, int d) => Press(onTap: off ? null : () => nudge(d), depth: .12,
+        child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(i, size: 11 * u, color: off ? p.dim : p.text)));
+    TextStyle big_(Color c) => TextStyle(color: c, fontSize: 44 * u, height: 1, fontWeight: FontWeight.w400, letterSpacing: -1.5 * u);
+    Widget value(num v, Color c) {
+      final parts = n(v).split('.');
+      return Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(parts[0], style: big_(c)),
+        if (parts.length > 1) Text('.${parts[1]}', style: TextStyle(color: c, fontSize: 16 * u)),
+      ]);
+    }
+    // the set temperature big; a range as two, the heating's end orange, the cooling's blue
+    final number = dual
+        ? Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            value(lo, off ? p.dim : heatColor),
+            Text('–', style: big_(p.dim).copyWith(fontWeight: FontWeight.w300)),
+            value(hi, off ? p.dim : coolColor),
+          ])
+        : t == null ? Text('—', style: big_(p.text)) : value(t, off ? p.dim : p.text);
+    final status = Text.rich(TextSpan(children: [
+      // working: white on its colour's glow (orange on orange was lost: the gallery); else the colour of what it is set to
+      TextSpan(text: line, style: TextStyle(color: active ? p.text : accent ?? p.dim, fontWeight: FontWeight.w700)),
+      if (cur != null) TextSpan(text: '  ·  Now ${n(cur)}°', style: TextStyle(color: p.dim)),
+    ]), maxLines: 1, overflow: TextOverflow.ellipsis);
+    // working: its colour glows up from the bottom of the glass, as Apple's tile is lit
+    Widget glow(Widget child) => Stack(fit: StackFit.expand, children: [
+          if (active && accent != null) Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
+              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [accent.withValues(alpha: 0), accent.withValues(alpha: .34)]))))),
+          child,
+        ]);
+    if (widget.size == CardSize.m) {
+      return Press(
+        onTap: widget.onLong, onLongPress: widget.holdOpens ? widget.onLong : null, depth: .025,
+        child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: glow(Padding(padding: EdgeInsets.symmetric(horizontal: 8 * u),
+            child: Row(children: [
+          // the number its share, the words theirs: a range (20–24) would take the whole width and leave "E…" of the name
+          Flexible(flex: 5, child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: number)),
+          SizedBox(width: 6 * u),
+          Expanded(flex: 4, child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(nameIn(widget.ha, widget.id, room), maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(12, 8.5 * u))),
+            DefaultTextStyle.merge(style: TextStyle(fontSize: max(11, 6.8 * u)), child: status),
+          ])),
+          Column(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            chevron(CupertinoIcons.chevron_up, 1), chevron(CupertinoIcons.chevron_down, -1)]),
+        ]))))),
+      );
+    }
     return Press(
-      onTap: widget.onLong, onLongPress: widget.onLong, depth: .025,
-      child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: Stack(children: [
-        Center(child: Padding(padding: EdgeInsets.only(bottom: 12 * u), child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(parts[0], style: TextStyle(color: p.text, fontSize: 44 * u, height: 1, fontWeight: FontWeight.w400, letterSpacing: -1.5 * u)),
-            if (parts.length > 1) Text('.${parts[1]}', style: TextStyle(color: p.text, fontSize: 16 * u)),
-          ]),
+      onTap: widget.onLong, onLongPress: widget.holdOpens ? widget.onLong : null, depth: .025,
+      child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: glow(Stack(children: [
+        Center(child: Padding(padding: EdgeInsets.fromLTRB(6 * u, 0, 6 * u, 12 * u), child: Column(mainAxisSize: MainAxisSize.min, children: [
+          FittedBox(fit: BoxFit.scaleDown, child: number),
           SizedBox(height: 3 * u),
-          Text(nameIn(widget.ha, widget.id, room), style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(11, 5.4 * u))),
-          Text([room, if (cur != null) '$cur°', if (st?.state == 'off') 'Off'].where((s) => s.isNotEmpty).join(' • '),
-              style: TextStyle(color: p.dim, fontSize: max(10, 4.8 * u))),
+          Text(nameIn(widget.ha, widget.id, room), maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(11, 5.4 * u))),
+          DefaultTextStyle.merge(style: TextStyle(fontSize: max(10, 4.8 * u)), child: status),
         ]))),
         // the chevrons, as on Apple's thermostat card: no ripple, a press that gives
-        Positioned(left: 4 * u, bottom: 4 * u, child: Press(onTap: () => nudge(-1), depth: .12,
-            child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(CupertinoIcons.chevron_down, size: 11 * u, color: p.text)))),
-        Positioned(right: 4 * u, bottom: 4 * u, child: Press(onTap: () => nudge(1), depth: .12,
-            child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(CupertinoIcons.chevron_up, size: 11 * u, color: p.text)))),
-      ]))),
+        Positioned(left: 4 * u, bottom: 4 * u, child: chevron(CupertinoIcons.chevron_down, -1)),
+        Positioned(right: 4 * u, bottom: 4 * u, child: chevron(CupertinoIcons.chevron_up, 1)),
+      ])))),
     );
   }
 }
 
 /// what plays: its cover, the title big, the buttons.  Always on Home (wall_view.dart nowPlayer), at the size that fits
-/// on its first page: 4 = 2 x 2 cells, 2 = 2 x 1 (the cover beside the words), 1 = a tile (the cover, the title, play)
+/// on its first page or the owner's: l = 2 x 2 cells, m = 2 x 1 (the cover beside the words), s = a tile (the cover, the
+/// title, play), xl = 4 x 2 (as m, all of it bigger)
 class NowPlayingCard extends StatelessWidget {
   final Ha ha;
   final Palette p;
   final String id;
   final double cell;
-  final int size;
+  final CardSize size;
   final VoidCallback onLong;
-  const NowPlayingCard({super.key, required this.ha, required this.p, required this.id, required this.cell, this.size = 4, required this.onLong});
+  final bool holdOpens;
+  const NowPlayingCard({super.key, required this.ha, required this.p, required this.id, required this.cell, this.size = CardSize.l, required this.onLong,
+      this.holdOpens = true});
   @override
   Widget build(BuildContext context) {
-    final st = ha.states[id], u = cell * 2.07 / 100;
+    final st = ha.states[id], u = cell * (size == CardSize.xl ? 3.4 : 2.07) / 100;
     final pic = st?.attr['entity_picture'] as String?;
     final title = st?.attr['media_title'] as String?, idle = title == null && st?.state != 'playing';
     final top = (idle ? 'Not Playing' : title ?? st?.name ?? '').toUpperCase();
@@ -276,25 +380,27 @@ class NowPlayingCard extends StatelessWidget {
     const shade = DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
         colors: [Color(0x00000000), Color(0xa6000000)], stops: [.3, 1])));
     final body = switch (size) {
-      1 => Stack(fit: StackFit.expand, children: [
+      CardSize.s => Stack(fit: StackFit.expand, children: [
           cover(22 * u),
           shade,
           Positioned(top: 2 * u, right: 2 * u, child: button(playing ? Icons.pause_circle_filled : Icons.play_circle_filled, 15 * u, 'media_play_pause')),
           Padding(padding: EdgeInsets.fromLTRB(5 * u, 0, 5 * u, 4 * u), child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end, children: [topText(5.6 * u), underText(max(10, 4.4 * u))])),
         ]),
-      2 => Container(color: const Color(0xff1f2233), child: Row(children: [
+      CardSize.m || CardSize.xl => Container(color: const Color(0xff1f2233), child: Row(children: [
           AspectRatio(aspectRatio: 1, child: cover(26 * u)),
           Expanded(child: Padding(padding: EdgeInsets.fromLTRB(6 * u, 4 * u, 4 * u, 3 * u), child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center, children: [
             topText(6.6 * u),
             underText(max(10, 5 * u)),
             SizedBox(height: 2 * u),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Row(mainAxisSize: MainAxisSize.min, children: [
               button(Icons.skip_previous, 12 * u, 'media_previous_track'),
+              SizedBox(width: 4 * u),
               button(playing ? Icons.pause : Icons.play_arrow, 16 * u, 'media_play_pause'),
+              SizedBox(width: 4 * u),
               button(Icons.skip_next, 12 * u, 'media_next_track'),
-            ]),
+            ])),
           ]))),
         ])),
       _ => Stack(fit: StackFit.expand, children: [
@@ -312,8 +418,8 @@ class NowPlayingCard extends StatelessWidget {
           ])),
         ]),
     };
-    return GestureDetector(onTap: onLong, onLongPress: onLong,
-        child: ClipRRect(borderRadius: BorderRadius.circular(size == 4 ? cell * .2 : cell * .16), child: body));
+    return GestureDetector(onTap: onLong, onLongPress: holdOpens ? onLong : null,
+        child: ClipRRect(borderRadius: BorderRadius.circular(size == CardSize.s || size == CardSize.m ? cell * .16 : cell * .2), child: body));
   }
 }
 
@@ -359,10 +465,12 @@ class DigitalClockCard extends StatelessWidget {
   final double cell;
   final bool h24;
   final bool wide;                              // 2 cells wide: room for the seconds and the whole date
-  const DigitalClockCard({super.key, required this.p, required this.cell, required this.h24, this.wide = false});
+  final CardSize? size;                         // s, m (wide), l (wide and bigger); none: by `wide`
+  const DigitalClockCard({super.key, required this.p, required this.cell, required this.h24, this.wide = false, this.size});
   @override
   Widget build(BuildContext context) {
-    final u = cell / 100;
+    final big = size == CardSize.l || size == CardSize.xl, wide = size == null ? this.wide : size != CardSize.s;
+    final u = cell * (big ? 1.7 : 1) / 100;
     return Glass(p: p, cell: cell, padding: EdgeInsets.symmetric(horizontal: 8 * u, vertical: 10 * u), child: Ticker(builder: (_, now) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
         FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Row(crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -390,11 +498,27 @@ class DateWeatherCard extends StatelessWidget {
   final Ha ha;
   final Palette p;
   final double cell;
-  const DateWeatherCard({super.key, required this.ha, required this.p, required this.cell});
+  final CardSize size;                          // s: Apple's; m: the date, and the weather beside it big
+  const DateWeatherCard({super.key, required this.ha, required this.p, required this.cell, this.size = CardSize.s});
   @override
   Widget build(BuildContext context) {
     final u = cell / 100;
     final w = ha.states.entries.where((e) => domainOf(e.key) == 'weather').map((e) => e.value).firstOrNull;
+    if (size != CardSize.s) {
+      return Glass(p: p, cell: cell, padding: EdgeInsets.symmetric(horizontal: 12 * u, vertical: 10 * u), child: Ticker(builder: (_, now) => Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('${_weekday(now)}, ${_month(now).substring(0, 3)}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: p.accentDay, fontWeight: FontWeight.w700, fontSize: max(11, 10.5 * u))),
+          Text('${now.day}', style: TextStyle(color: p.text, fontSize: 40 * u, fontWeight: FontWeight.w300, height: .95)),
+        ])),
+        if (w != null) Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(weatherIcon(w.state), size: 26 * u, color: p.text),
+          Text(w.numAttr('temperature') != null ? '${w.numAttr('temperature')!.round()}°' : '',
+              style: TextStyle(color: p.text, fontSize: 22 * u, fontWeight: FontWeight.w400)),
+          Text(weatherText(w.state), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.dim, fontSize: max(10, 8.5 * u))),
+        ])),
+      ])));
+    }
     return Glass(p: p, cell: cell, padding: EdgeInsets.symmetric(horizontal: 11 * u, vertical: 10 * u), child: Ticker(builder: (_, now) =>
         Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('${_weekday(now).substring(0, 3)} ${_month(now).substring(0, 3)}',
@@ -429,6 +553,9 @@ class CameraCard extends StatefulWidget {
 /// small for the Show 5's decoder), muted, only while the card is seen.  Without a stream, stills; Home Assistant's
 /// own still can fail where the stream works (measured: an ONVIF Uniview, HTTP 500 after HA's 10 s timeout, every time).
 class _CameraCardState extends State<CameraCard> {
+  /// each camera's stream playing in its card: a copy of the card that is not live (the one lifted under the finger in
+  /// the edit mode) shows that one's picture, no second stream for the Show 5 to decode, nothing to wait for
+  static final playing = <String, VideoPlayerController>{};
   VideoPlayerController? _v;
   final _shown = ValueNotifier<VideoPlayerController?>(null);   // the playing stream, for the full screen view
   bool _full = false;                           // the full screen view is open: live whatever is under it
@@ -493,7 +620,7 @@ class _CameraCardState extends State<CameraCard> {
       await v.setVolume(0);
       await v.play();
       debugPrint('camera $cam: live, ${v.value.size.width.round()} x ${v.value.size.height.round()}');
-      if (_v == v) _shown.value = v;
+      if (_v == v) { _shown.value = v; playing[widget.id] = v; }
     } catch (e) {
       if (_v == v) _next();
     }
@@ -519,6 +646,7 @@ class _CameraCardState extends State<CameraCard> {
     final v = _v;
     _v = null;
     if (!_disposed) _shown.value = null;
+    playing.removeWhere((_, x) => x == v);
     v?.dispose();
   }
 
@@ -531,7 +659,7 @@ class _CameraCardState extends State<CameraCard> {
       final rq = await _http.getUrl(widget.ha.image(pic));
       widget.ha.authHeader.forEach(rq.headers.set);
       final rs = await rq.close().timeout(const Duration(seconds: 30));
-      final bytes = await consolidateHttpClientResponseBytes(rs);
+      final bytes = await consolidateBytes(rs);
       if (rs.statusCode == 200) {
         _fails = 0;
         if (mounted) setState(() => _jpg = bytes);
@@ -547,7 +675,7 @@ class _CameraCardState extends State<CameraCard> {
 
   @override
   Widget build(BuildContext context) {
-    final u = widget.cell / 100, v = _v;
+    final u = widget.cell / 100, m = widget.live ? null : playing[widget.id], v = _v ?? m;
     final live = v != null && v.value.isInitialized && v.value.size.width > 0;
     // no picture (Home Assistant could not get one from the camera): said so, on glass, instead of a black square
     final none = Glass(p: widget.p, cell: widget.cell, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -654,13 +782,26 @@ class ScreenTile extends StatelessWidget {
   final String name;
   final double cell;
   final VoidCallback onTap;
-  const ScreenTile({super.key, required this.p, required this.name, required this.cell, required this.onTap});
+  final CardSize size;                          // s, or m: the badge beside the name
+  const ScreenTile({super.key, required this.p, required this.name, required this.cell, required this.onTap, this.size = CardSize.s});
   @override
   Widget build(BuildContext context) {
     final u = cell / 100, badge = 26 * u;
     final icon = RegExp('music', caseSensitive: false).hasMatch(name) ? Icons.music_note
         : RegExp('clock', caseSensitive: false).hasMatch(name) ? Icons.schedule
         : RegExp('assistant|home', caseSensitive: false).hasMatch(name) ? Icons.home : Icons.web;
+    if (size != CardSize.s) {
+      return GestureDetector(onTap: onTap, child: Glass(p: p, cell: cell, padding: EdgeInsets.all(12 * u), child: Row(children: [
+        Container(width: badge * 1.3, height: badge * 1.3,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: p.text == Colors.white ? const Color(0x24ffffff) : const Color(0x14000000)),
+            child: Icon(icon, size: badge * .72, color: p.text)),
+        SizedBox(width: 10 * u),
+        Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w600, fontSize: max(13.0, 10 * u))),
+          Text('Open', style: TextStyle(color: p.dim, fontSize: max(11.0, 7.8 * u), fontWeight: FontWeight.w500)),
+        ])),
+      ])));
+    }
     return GestureDetector(onTap: onTap, child: Glass(p: p, cell: cell, padding: EdgeInsets.all(10 * u), child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
       Container(width: badge, height: badge,

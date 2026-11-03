@@ -19,7 +19,7 @@ class LockScreen extends StatefulWidget {
   final String nextAlarm;
   final int minutes;                            // a new photo this often
   final bool round;
-  final String? player;                         // the media card's player: shown while it plays or is paused
+  final String? player;                         // the media card's player: shown while it plays, and for 20 s after a pause
   final VoidCallback onUnlock;
   const LockScreen({super.key, required this.photos, required this.ha, required this.h24, required this.onUnlock,
       this.nextAlarm = '', this.minutes = 3, this.round = false, this.player});
@@ -43,7 +43,7 @@ class _LockScreenState extends State<LockScreen> with TickerProviderStateMixin {
   }
 
   @override
-  void dispose() { _next?.cancel(); _tick?.cancel(); settle.dispose(); hint.dispose(); super.dispose(); }
+  void dispose() { _next?.cancel(); _tick?.cancel(); _gone?.cancel(); settle.dispose(); hint.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     _next?.cancel();
@@ -148,9 +148,21 @@ class _LockScreenState extends State<LockScreen> with TickerProviderStateMixin {
         );
       });
 
+  /// how long a paused player stays on the lock screen (asked 2026-11-03): long enough to play it again from here,
+  /// not so long that a pause from the evening before covers the photo all night
+  static const pausedFor = Duration(seconds: 20);
+  Timer? _gone;
+
   String? _playing() {
     final id = widget.player, st = id == null ? null : widget.ha.states[id];
-    return st != null && (st.state == 'playing' || st.state == 'paused') ? id : null;
+    if (st == null) return null;
+    if (widget.ha.sounding(id!)) return id;
+    if (st.state != 'paused' && st.state != 'playing') return null;     // playing but muted: AirPlay's pause
+    final left = pausedFor - DateTime.now().difference(widget.ha.quietSince[id] ??= DateTime.now());
+    if (left <= Duration.zero) return null;
+    _gone?.cancel();
+    _gone = Timer(left + const Duration(milliseconds: 50), () { if (mounted) setState(() {}); });   // off at 20 s, not at the next 15 s tick
+    return id;
   }
 
   static String _date(DateTime t) {

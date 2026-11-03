@@ -1,5 +1,9 @@
 package io.github.nt_f.echowall
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.SystemClock
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
@@ -17,6 +21,48 @@ import io.flutter.plugin.common.MethodChannel
  * Characters the virtual keyboard map lacks come back false, and Dart inserts them by script. */
 class MainActivity : FlutterActivity() {
     private val map by lazy { KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD) }
+    private var apps: MethodChannel? = null
+    private var installs: BroadcastReceiver? = null
+
+    /* in front again: the app bar over the other app goes (and with it the lent polls: this activity polls /front) */
+    override fun onResume() {
+        super.onResume()
+        AppBarService.stop(this)
+    }
+
+    override fun onDestroy() {
+        installs?.let { unregisterReceiver(it) }
+        super.onDestroy()
+    }
+
+    /* The apps the owner installed beside this one (Launchable.kt): listed for the switcher and Home's cards, started
+     * with the app bar over them (AppBarService.kt), and the list told again when one comes or goes */
+    private fun appsChannel(engine: FlutterEngine) {
+        val ch = MethodChannel(engine.dartExecutor.binaryMessenger, "echo_screen/apps")
+        apps = ch
+        ch.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "list" -> {
+                    val px = (64 * resources.displayMetrics.density).toInt()
+                    result.success(Launchable.list(this).map { mapOf("package" to it.pkg, "label" to it.label, "icon" to Launchable.png(it.icon, px)) })
+                }
+                "launch" -> {
+                    val pkg = call.arguments as String
+                    val i = Launchable.intent(this, pkg)
+                    if (i == null) result.success(false)
+                    else { AppBarService.start(this, pkg); startActivity(i); result.success(true) }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        installs = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) { apps?.invokeMethod("changed", null) }
+        }
+        registerReceiver(installs, IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED); addAction(Intent.ACTION_PACKAGE_REMOVED); addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addDataScheme("package")
+        })
+    }
 
     private fun findWeb(v: View?): WebView? {
         if (v is WebView) return v
@@ -26,6 +72,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
+        appsChannel(engine)
         MethodChannel(engine.dartExecutor.binaryMessenger, "echo_screen/keys").setMethodCallHandler { call, result ->
             if (call.method == "isRound") {             // the Echo Spot's round glass (and debug.echoscreen.round=1 for screenshots)
                 val prop = try {
@@ -44,9 +91,14 @@ class MainActivity : FlutterActivity() {
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 result.success(true); return@setMethodCallHandler
             }
+            if (call.method == "device") {              // what the Echo-Wall integration lists the device as
+                result.success(mapOf("manufacturer" to android.os.Build.MANUFACTURER, "model" to android.os.Build.MODEL,
+                    "product" to android.os.Build.PRODUCT)); return@setMethodCallHandler
+            }
             if (call.method == "hasInputMethod") {      // an Echo: none; elsewhere the device's own keyboard types
+                // this app's own (EchoKeyboard, for the apps it starts) does not count: it never comes up for this app
                 val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                result.success(imm.enabledInputMethodList.isNotEmpty()); return@setMethodCallHandler
+                result.success(imm.enabledInputMethodList.any { it.packageName != packageName }); return@setMethodCallHandler
             }
             val web = findWeb(window.decorView)
             if (web == null) { result.success(false); return@setMethodCallHandler }

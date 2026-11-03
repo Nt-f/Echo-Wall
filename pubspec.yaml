@@ -38,6 +38,7 @@ dependencies:
   webview_flutter_android: ^4.12.0
   path_provider: ^2.1.6
   video_player: ^2.11.1
+  web: ^1.1.0                                    # the panel preview's build (lib/preview.dart, lib/io/io_web.dart)
 
 dev_dependencies:
   flutter_test:

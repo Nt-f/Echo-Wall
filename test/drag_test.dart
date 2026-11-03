@@ -1,5 +1,6 @@
 // Moving widgets in edit mode: a widget dropped anywhere on the grid stays there (a gap too); on another widget, the two
 // swap; every widget moves (the clocks, the date, a screen's like Music); held at the screen's edge, the page turns
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_screen/ha.dart';
@@ -76,6 +77,32 @@ void main() {
     expect(at(lay, 'lock.b')?.first, 0);
   });
 
+  Future<void> resize(WidgetTester t, String key) async {
+    await t.tap(find.descendant(of: find.byKey(ValueKey('home/$key')), matching: find.byIcon(CupertinoIcons.arrow_up_left_arrow_down_right)));
+    await t.pump(const Duration(milliseconds: 700));
+  }
+
+  testWidgets('resized: it keeps its corner; the one it grows over moves next to it, the rest stay; kept after Done', (t) async {
+    final lay = await home(t);
+    await resize(t, 'lock.a');                            // small -> wide: over Lock B
+    expect(lay.sizes['home']?['lock.a'], '2x1');
+    expect(at(lay, 'lock.a'), [0, 0, 1]);
+    expect(at(lay, 'lock.b'), [0, 3, 1]);                 // the free cell beside, on the same page
+    expect(at(lay, 'lock.c'), [0, 2, 1]);
+    expect(at(lay, 'date-1'), [0, 3, 0]);
+    await t.tap(find.text('Done'));
+    await t.pump(const Duration(seconds: 1));
+    expect(t.getCenter(find.text('Lock B')).dx, greaterThan(16 + 3 * 235.5));
+  });
+
+  testWidgets('resized in the last column: it grows to the left, not onto another page', (t) async {
+    final lay = await home(t, locks: 4);                  // Lock D at 3,1
+    await resize(t, 'lock.d');
+    expect(at(lay, 'lock.d'), [0, 2, 1]);                 // wide, its right edge where it was
+    expect(at(lay, 'lock.c')?.first, 1);                  // the page full: Lock C to the next
+    expect(at(lay, 'lock.a'), [0, 0, 1]);
+  });
+
   testWidgets('the lifted widget keeps its glass (the backdrop reaches the Overlay)', (t) async {
     await home(t);
     final a = t.getCenter(find.text('Lock A'));
@@ -129,5 +156,82 @@ void main() {
       expect(r.debugPainted, isNotNull);
       expect((r.debugPainted!.left - real.left).abs(), lessThan(1), reason: 'drawn at ${r.debugPainted}, is at $real');
     }
+  });
+
+  // two rooms (Bedroom, Kitchen) after Home: Home 0, Bedroom 1, Kitchen 2
+  Future<Layout> rooms(WidgetTester t) async {
+    t.view.physicalSize = const Size(960, 480);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final ha = Ha()..connected = true;
+    ha.areas = [const Area('bed', 'Bedroom'), const Area('kit', 'Kitchen')];
+    for (final (id, name, area) in [('lock.k1', 'K one', 'kit'), ('lock.k2', 'K two', 'kit'), ('lock.k3', 'K three', 'kit'), ('lock.b1', 'B one', 'bed')]) {
+      ha.states[id] = EntityState('locked', {'friendly_name': name});
+      ha.putInArea(id, area);
+    }
+    final lay = Layout()..wallpaper = Wallpaper.amber..favorites = []..ambientSeconds = 0;
+    await t.pumpWidget(MaterialApp(home: WallView(ha: ha, layout: lay, h24: true, screens: const [], onScreen: (_) {})));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.longPressAt(const Offset(480, 480 - 11));
+    await t.pump(const Duration(milliseconds: 300));
+    for (var i = 0; i < 2; i++) { await t.tap(find.text('›')); for (var k = 0; k < 20; k++) { await t.pump(const Duration(milliseconds: 20)); } }
+    return lay;
+  }
+
+  /// lifted, held at an edge until `flips` pages turned, then let go over a cell
+  Future<void> carry(WidgetTester t, Offset from, Offset edge, int flips, Offset to) async {
+    final g = await t.startGesture(from);
+    await t.pump(const Duration(milliseconds: 50));
+    for (var i = 1; i <= 12; i++) { await g.moveTo(Offset.lerp(from, edge, i / 12)!); await t.pump(const Duration(milliseconds: 30)); }
+    for (var ms = 0; ms < 950 * flips; ms += 50) { await g.moveTo(edge + Offset(0, (ms ~/ 50).isEven ? 1 : -1)); await t.pump(const Duration(milliseconds: 50)); }
+    await t.pump(const Duration(milliseconds: 400));
+    for (var i = 1; i <= 12; i++) { await g.moveTo(Offset.lerp(edge, to, i / 12)!); await t.pump(const Duration(milliseconds: 30)); }
+    await t.pump(const Duration(milliseconds: 300));
+    await g.up();
+    await t.pump(const Duration(milliseconds: 700));
+  }
+
+  testWidgets('dragged to another room: held at the edge, the room before; it stays where it was let go', (t) async {
+    final lay = await rooms(t);
+    expect(find.text('K one'), findsOneWidget);
+    await carry(t, t.getCenter(find.text('K one')), const Offset(8, 300), 1, cellCenter(2, 0));
+    expect(lay.cards['area:bed'], contains('lock.k1'));
+    expect(lay.exclude['area:kit'], contains('lock.k1'));
+    expect(lay.place['area:bed']?['lock.k1'], [0, 2, 0]);
+    expect(find.text('K one'), findsOneWidget);                  // the Bedroom shown, K one on it
+    expect(find.text('B one'), findsOneWidget);
+    expect(lay.place['area:kit']?.containsKey('lock.k1') ?? false, isFalse);
+  });
+
+  testWidgets('dragged from a room onto Home: one of Home\'s tiles (a favourite), off the room', (t) async {
+    final lay = await rooms(t);
+    await carry(t, t.getCenter(find.text('K two')), const Offset(8, 300), 2, cellCenter(3, 1));
+    expect(lay.favorites, contains('lock.k2'));
+    expect(lay.place['home']?['lock.k2'], [0, 3, 1]);
+    expect(lay.exclude['area:kit'], contains('lock.k2'));
+  });
+
+  testWidgets('carried over another room and back: home again where it was, nothing moved', (t) async {
+    final lay = await rooms(t);
+    final start = t.getCenter(find.text('K three'));
+    final g = await t.startGesture(start);
+    await t.pump(const Duration(milliseconds: 50));
+    for (var i = 1; i <= 12; i++) { await g.moveTo(Offset.lerp(start, const Offset(8, 300), i / 12)!); await t.pump(const Duration(milliseconds: 30)); }
+    for (var ms = 0; ms < 950; ms += 50) { await g.moveTo(Offset(8, 300 + ((ms ~/ 50).isEven ? 1.0 : -1.0))); await t.pump(const Duration(milliseconds: 50)); }
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('B one'), findsOneWidget);                  // over the Bedroom
+    expect(find.text('K three'), findsNWidgets(2));              // the lifted one and its place there, dim
+    for (var ms = 0; ms < 950; ms += 50) { await g.moveTo(Offset(952, 300 + ((ms ~/ 50).isEven ? 1.0 : -1.0))); await t.pump(const Duration(milliseconds: 50)); }
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('K one'), findsOneWidget);                  // back over the Kitchen
+    final before = Map.of(lay.place['area:kit'] ?? const {});
+    await g.moveTo(start);
+    await t.pump(const Duration(milliseconds: 300));
+    await g.up();
+    await t.pump(const Duration(milliseconds: 700));
+    expect(lay.cards['area:bed'] ?? const [], isNot(contains('lock.k3')));
+    final after = lay.place['area:kit'] ?? const {};
+    for (final k in ['lock.k1', 'lock.k2']) { expect(after[k], before[k] ?? after[k], reason: k); }
+    expect(lay.exclude['area:kit'] ?? const [], isNot(contains('lock.k3')));
   });
 }

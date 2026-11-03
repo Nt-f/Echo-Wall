@@ -8,7 +8,7 @@
 // (/api/faces?id=<id>: their boxes), which the clock keeps clear of (placement.dart).
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:io';
+import '../io/io.dart';
 import 'dart:math';
 import 'dart:ui';
 
