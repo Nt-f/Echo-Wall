@@ -21,6 +21,7 @@ import 'press.dart';
 import 'sheets.dart';
 import 'voice.dart';
 import '../hassmic.dart' show EchoState;
+import '../keyboard.dart';
 import 'widgets.dart';
 
 enum Kind { analog, digital, date, thermo, playing, camera, tile, screen }
@@ -224,13 +225,13 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     final home = <Item>[
       if (lay.analogClock) const Item(Kind.analog),
       if (lay.digitalClock) const Item(Kind.digital),
-      const Item(Kind.date),
+      if (lay.dateCard) const Item(Kind.date),
     ];
     final fav = favorites();
     for (final id in fav) { home.add(itemOf(id, room: ha.areaName(ha.areaOf(id)))); }
-    final player = nowPlayer();
+    final player = lay.nowPlaying ? nowPlayer() : null;
     if (player != null) home.add(Item(Kind.playing, id: player));
-    for (var i = 0; i < widget.screens.length; i++) { home.add(Item(Kind.screen, screen: i, name: widget.screens[i])); }
+    for (var i = 0; i < widget.screens.length; i++) { if (!lay.hiddenScreens.contains(widget.screens[i])) home.add(Item(Kind.screen, screen: i, name: widget.screens[i])); }
     final ho = lay.homeOrder;
     if (ho.isNotEmpty) {                        // as moved (List.sort is not stable: ties keep their index)
       final idx = {for (var i = 0; i < home.length; i++) home[i].key: i};
@@ -468,16 +469,142 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           lay.favorites = fav.contains(id) ? (fav..remove(id)) : [...fav, id];
           lay.changed();
         }, left: true),
-        if (id != null && it.kind != Kind.playing) badge('−', const Color(0xffff453a), Colors.white, () {
-          if (onHome) { lay.favorites = fav..remove(id); } else { lay.hidden.add(id); if (lay.favorites != null) lay.favorites!.remove(id); }
-          lay.changed();
-        }, left: false),
-        if (it.kind == Kind.analog || it.kind == Kind.digital) badge('−', const Color(0xffff453a), Colors.white, () {
-          if (it.kind == Kind.analog) { lay.analogClock = false; } else { lay.digitalClock = false; }
-          lay.changed();
-        }, left: false),
+        badge('−', const Color(0xffff453a), Colors.white, () { _remove(it, page.area); lay.changed(); }, left: false),
       ]),
     );
+  }
+
+  /// a widget off its page: Home's own (clocks, date, media card, a screen's) switched off, a device off Home's
+  /// favourites, or in a room hidden (the Hidden list has it); its place forgotten.  "+ Add" brings any of them back
+  void _remove(Item it, String? area) {
+    switch (it.kind) {
+      case Kind.analog: lay.analogClock = false;
+      case Kind.digital: lay.digitalClock = false;
+      case Kind.date: lay.dateCard = false;
+      case Kind.playing: lay.nowPlaying = false;
+      case Kind.screen: lay.hiddenScreens.add(it.name);
+      default:
+        final id = it.id!;
+        if (area == null) { lay.favorites = favorites()..remove(id); } else { lay.hidden.add(id); lay.favorites?.remove(id); }
+    }
+    lay.place[_gk(area)]?.remove(it.key);
+  }
+
+  /// the edit mode's dialogs: solid (the palette's sheet is glass, made for a backdrop behind it; over the busy
+  /// HomeView its words were lost)
+  Color _solid(Palette p) => p.text == Colors.white ? const Color(0xf71c1c1e) : const Color(0xf7f2f2f7);
+
+  void _clearPage(List<PageSpec> ps, Palette p) {
+    if (page >= ps.length || ps[page].placed.isEmpty) return;
+    final pg = ps[page], n = pg.placed.length;
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: _solid(p),
+      title: Text('Clear this page?', style: TextStyle(color: p.text)),
+      content: Text(pg.area == null ? 'Its $n widget${n == 1 ? '' : 's'} come off Home. “+ Add” brings any of them back.'
+          : 'Its $n device${n == 1 ? '' : 's'} are hidden. “Hidden” shows them again.', style: TextStyle(color: p.dim)),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+        TextButton(onPressed: () {
+          for (final (it, _, _) in pg.placed) { _remove(it, pg.area); }
+          lay.changed();
+          Navigator.of(ctx).pop();
+        }, child: const Text('Clear', style: TextStyle(color: Color(0xffff453a), fontWeight: FontWeight.w700))),
+      ],
+    ));
+  }
+
+  /// what can go on Home: its own widgets that are off, then every device, cameras first, then by room (those on
+  /// Home already left out); a search over names and rooms, typed on the app's own keyboard (the Echo has no input
+  /// method), and a scrollbar that says there is more
+  void _addSheet(Palette p) {
+    var q = '';
+    var kb = false;
+    final scroll = ScrollController();
+    final fg = p.text == Colors.white ? Colors.white : const Color(0xff1c1c1e);
+    showDialog(context: context, barrierColor: const Color(0x66000000), builder: (ctx) => StatefulBuilder(builder: (ctx, set) =>
+        ListenableBuilder(listenable: Listenable.merge([lay, ha]), builder: (ctx, _) {
+      final needle = q.trim().toLowerCase();
+      bool match(String text) => needle.isEmpty || text.toLowerCase().contains(needle);
+      final own = <(String, VoidCallback)>[
+        if (!lay.analogClock) ('Analog clock', () => lay.analogClock = true),
+        if (!lay.digitalClock) ('Digital clock', () => lay.digitalClock = true),
+        if (!lay.dateCard) ('Date & weather', () => lay.dateCard = true),
+        if (!lay.nowPlaying) ('Now Playing', () => lay.nowPlaying = true),
+        for (final s in widget.screens) if (lay.hiddenScreens.contains(s)) (s, () => lay.hiddenScreens.remove(s)),
+      ].where((e) => match(e.$1)).toList();
+      final onHome = favorites().toSet();
+      bool can(String id) {
+        final d = domainOf(id);
+        if (onHome.contains(id) || ha.hiddenByHa.contains(id)) return false;
+        if (d == 'binary_sensor') return sensorClasses.contains(ha.states[id]!.attr['device_class']);
+        return tileDomains.contains(d) || d == 'scene' || d == 'script' || d == 'camera';
+      }
+      // cameras first (a camera added again in Home Assistant is a new entity, looked for here), then by room
+      final byRoom = <String, List<String>>{};
+      for (final id in ha.states.keys.where(can)) {
+        final room = ha.areaName(ha.areaOf(id));
+        if (!match('${nameIn(ha, id, null)} $room $id')) continue;
+        byRoom.putIfAbsent(domainOf(id) == 'camera' ? '\u0000Cameras' : room, () => []).add(id);
+      }
+      final rooms = byRoom.keys.toList()..sort((a, b) => a.isEmpty ? 1 : b.isEmpty ? -1 : a.compareTo(b));
+      final rows = <Widget>[
+        if (own.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final (name, on) in own) ActionChip(label: Text('+ $name'), onPressed: () { on(); lay.changed(); }),
+        ])),
+        for (final r in rooms) ...[
+          Padding(padding: const EdgeInsets.only(top: 14, bottom: 2), child: Text(r.isEmpty ? 'Other' : r.replaceFirst('\u0000', ''),
+              style: TextStyle(color: p.dim, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: .4))),
+          for (final id in (byRoom[r]!..sort((a, b) => nameIn(ha, a, r).compareTo(nameIn(ha, b, r)))))
+            ListTile(dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(nameIn(ha, id, r.startsWith('\u0000') ? null : r), style: TextStyle(color: fg, fontSize: 15)),
+                subtitle: lay.hidden.contains(id) ? Text('hidden', style: TextStyle(color: p.dim, fontSize: 12)) : null,
+                trailing: const Icon(Icons.add_circle, color: Color(0xff30d158)),
+                onTap: () { lay.hidden.remove(id); lay.favorites = [...favorites(), id]; lay.changed(); }),
+        ],
+        if (own.isEmpty && rooms.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(needle.isEmpty ? 'Everything is on Home already.' : 'Nothing called “$q”.', style: TextStyle(color: p.dim))),
+      ];
+      final search = GestureDetector(
+        onTap: () => set(() => kb = true),
+        child: Container(
+          height: 40, padding: const EdgeInsets.only(left: 12),
+          decoration: BoxDecoration(color: fg.withValues(alpha: .1), borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kb ? const Color(0xff0a84ff) : Colors.transparent, width: 1.5)),
+          child: Row(children: [
+            Icon(CupertinoIcons.search, color: p.dim, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(q.isEmpty ? 'Search devices and widgets' : q, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: q.isEmpty ? p.dim : fg, fontSize: 15))),
+            if (q.isNotEmpty) GestureDetector(onTap: () => set(() => q = ''),
+                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Icon(CupertinoIcons.xmark_circle_fill, color: p.dim, size: 18))),
+          ]),
+        ),
+      );
+      final card = Container(
+        constraints: const BoxConstraints(maxWidth: 560),
+        decoration: BoxDecoration(color: _solid(p), borderRadius: BorderRadius.circular(24),
+            boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 30)]),
+        padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(child: Text('Add to Home', style: TextStyle(color: fg, fontSize: 20, fontWeight: FontWeight.w700))),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Done')),
+          ]),
+          Padding(padding: const EdgeInsets.only(right: 8, bottom: 4), child: search),
+          Expanded(child: RawScrollbar(controller: scroll, thumbVisibility: true, thickness: 4, radius: const Radius.circular(2),
+              thumbColor: fg.withValues(alpha: .45), child: ListView.builder(
+              controller: scroll, padding: const EdgeInsets.only(right: 14, bottom: 8),
+              itemCount: rows.length, itemBuilder: (_, i) => rows[i]))),
+        ]),
+      );
+      return Material(type: MaterialType.transparency, child: SafeArea(child: Column(children: [
+        Expanded(child: Padding(padding: EdgeInsets.fromLTRB(16, kb ? 8 : 24, 16, kb ? 6 : 24), child: Center(child: card))),
+        if (kb) Keyboard(numbers: false, round: widget.round, onHide: () => set(() => kb = false),
+            onText: (s) => set(() => q += s),
+            onBackspace: () => set(() { if (q.isNotEmpty) q = q.substring(0, q.length - 1); }),
+            onEnter: () => set(() => kb = false)),
+      ])));
+    }))).then((_) => scroll.dispose());
   }
 
   /// a page as a drop target: the dragged widget goes to the cell its top-left corner is nearest to (anywhere, a
@@ -543,8 +670,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 margin: const EdgeInsets.symmetric(horizontal: 4), width: 30, height: 30,
                 decoration: BoxDecoration(shape: BoxShape.circle, gradient: Palette.of(w).wall,
                     border: Border.all(color: lay.wallpaper == w ? Colors.white : Colors.transparent, width: 2)))),
-          if (!lay.analogClock || !lay.digitalClock)
-            _pill('+ Clock', () { lay.analogClock = true; lay.digitalClock = true; lay.changed(); }),
+          _pill('+ Add', () => _addSheet(p)),
+          _pill('Clear page', () => _clearPage(ps, p)),
           _pill(lay.hidden.isEmpty ? 'Hidden' : 'Hidden (${lay.hidden.length})', () => _hiddenSheet(p)),
           _pill('Reset', lay.reset),
           _pill('Done', () => edit(false), primary: true),
@@ -559,7 +686,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         child: Text(s, style: TextStyle(color: primary ? const Color(0xff1c1c1e) : Colors.white, fontWeight: FontWeight.w600, fontSize: 14))));
 
   void _hiddenSheet(Palette p) => showDialog(context: context, builder: (ctx) => ListenableBuilder(listenable: lay, builder: (ctx, _) => Dialog(
-        backgroundColor: p.sheet, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: _solid(p), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460, maxHeight: 420), child: ListView(padding: const EdgeInsets.all(20), shrinkWrap: true, children: [
           Text('Hidden', style: TextStyle(color: p.text, fontSize: 20, fontWeight: FontWeight.w700)),
           Text(lay.hidden.isEmpty ? 'Nothing hidden: tap − on a tile to hide it.' : 'Tap one to show it again.', style: TextStyle(color: p.dim)),

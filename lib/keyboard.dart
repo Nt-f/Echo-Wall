@@ -10,9 +10,13 @@ typedef InsertText = Future<void> Function(String text);
 class Keyboard extends StatefulWidget {
   final bool numbers;                   // a number field: the digits first
   final bool round;                     // a round screen: the keys kept off the circle's edge
-  final InsertText fallback;
+  final InsertText? fallback;
   final VoidCallback onHide;
-  const Keyboard({super.key, required this.numbers, required this.fallback, required this.onHide, this.round = false});
+  // typing into the app's own field (the HomeView's search) instead of the WebView: each character, ⌫, ⏎
+  final void Function(String)? onText;
+  final VoidCallback? onBackspace, onEnter;
+  const Keyboard({super.key, required this.numbers, this.fallback, required this.onHide, this.round = false,
+      this.onText, this.onBackspace, this.onEnter});
   @override
   State<Keyboard> createState() => _KeyboardState();
 }
@@ -43,10 +47,15 @@ class _KeyboardState extends State<Keyboard> {
     if (old.numbers != widget.numbers) symbols = widget.numbers;
   }
 
-  Future<void> _key(String code) => _keys.invokeMethod('key', code);
+  Future<void> _key(String code) async {
+    if (code == 'backspace' && widget.onBackspace != null) return widget.onBackspace!();
+    if (code == 'enter' && widget.onEnter != null) return widget.onEnter!();
+    await _keys.invokeMethod('key', code);
+  }
   Future<void> _text(String s) async {
+    if (widget.onText != null) return widget.onText!(s);
     final ok = await _keys.invokeMethod<bool>('text', s) ?? false;
-    if (!ok) await widget.fallback(s);
+    if (!ok) await widget.fallback?.call(s);
   }
 
   void _down(String k) {

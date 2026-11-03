@@ -19,7 +19,8 @@ class Layout extends ChangeNotifier {
   Map<String, Map<String, List<int>>> place = {};
   String? player;                               // the media card's: the last player that played (it stays on it)
   int ambientSeconds = 120;                     // 0: never
-  bool analogClock = true, digitalClock = true;
+  bool analogClock = true, digitalClock = true, dateCard = true, nowPlaying = true;   // Home's own widgets, each removable
+  Set<String> hiddenScreens = {};               // the app's screens (by name) whose tile was taken off Home
   File? _file;
   Timer? _save;
 
@@ -46,10 +47,14 @@ class Layout extends ChangeNotifier {
     ambientSeconds = (j['ambient'] as num? ?? 120).toInt();
     analogClock = j['analog_clock'] != false;
     digitalClock = j['digital_clock'] != false;
+    dateCard = j['date_card'] != false;
+    nowPlaying = j['now_playing'] != false;
+    hiddenScreens = {...(j['hidden_screens'] as List? ?? const []).cast<String>()};
   }
 
   Map<String, dynamic> toJson() => {'wallpaper': wallpaper.name, 'favorites': favorites, 'hidden': hidden.toList(), 'order': order, 'home_order': homeOrder, 'place': place, 'player': player,
-      'ambient': ambientSeconds, 'analog_clock': analogClock, 'digital_clock': digitalClock};
+      'ambient': ambientSeconds, 'analog_clock': analogClock, 'digital_clock': digitalClock,
+      'date_card': dateCard, 'now_playing': nowPlaying, 'hidden_screens': hiddenScreens.toList()};
 
   void changed() {
     notifyListeners();
@@ -63,7 +68,8 @@ class Layout extends ChangeNotifier {
   }
 
   void reset() {
-    favorites = null; hidden = {}; order = {}; homeOrder = []; place = {};
+    favorites = null; hidden = {}; order = {}; homeOrder = []; place = {}; hiddenScreens = {};
+    analogClock = digitalClock = dateCard = nowPlaying = true;
     changed();
   }
 }
