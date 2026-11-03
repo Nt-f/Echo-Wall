@@ -1,6 +1,6 @@
 // The apps the owner installed beside this one (a YouTube client, a music app; echo-dot-assist docs/screen-apps.md
-// "Other apps"): listed by the Android side (Launchable.kt) for the switcher and Home's cards, and started there with
-// the app bar over them (AppBarService.kt: pulled down from the top edge, Home first).  While one has the screen this
+// "Other apps"): listed by the Android side (Launchable.kt) for Home's cards and started from them; hassmic's shell has
+// the bar back over them (pulled down from the top edge, Home first: docs/screen-apps.md "The shell").  While one has the screen this
 // app is paused, and it does not poll /back then: the bar's process polls /lent/<package> instead, so that hassmic keeps
 // its own layer off the other app.
 import 'package:flutter/foundation.dart';

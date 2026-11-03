@@ -24,10 +24,20 @@ class MainActivity : FlutterActivity() {
     private var apps: MethodChannel? = null
     private var installs: BroadcastReceiver? = null
 
-    /* in front again: the app bar over the other app goes (and with it the lent polls: this activity polls /front) */
-    override fun onResume() {
-        super.onResume()
-        AppBarService.stop(this)
+    private var nav: MethodChannel? = null
+
+    /* hassmic's shell (its bar over every app, echo-dot-assist docs/screen-apps.md "The shell") starts this activity by
+     * the SCREEN intent with an extra: "screen" (one of the screens, by name) or "home"; Dart shows it */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        tellNav(intent)
+    }
+
+    private fun tellNav(i: Intent?) {
+        val ch = nav ?: return
+        i?.getStringExtra("screen")?.let { ch.invokeMethod("screen", it); i.removeExtra("screen"); return }
+        if (i?.getBooleanExtra("home", false) == true) { ch.invokeMethod("home", null); i.removeExtra("home") }
     }
 
     override fun onDestroy() {
@@ -35,8 +45,8 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
-    /* The apps the owner installed beside this one (Launchable.kt): listed for the switcher and Home's cards, started
-     * with the app bar over them (AppBarService.kt), and the list told again when one comes or goes */
+    /* The apps the owner installed beside this one (Launchable.kt): listed for Home's cards and started from them (hassmic's
+     * shell has the bar back), and the list told again when one comes or goes */
     private fun appsChannel(engine: FlutterEngine) {
         val ch = MethodChannel(engine.dartExecutor.binaryMessenger, "echo_screen/apps")
         apps = ch
@@ -50,7 +60,7 @@ class MainActivity : FlutterActivity() {
                     val pkg = call.arguments as String
                     val i = Launchable.intent(this, pkg)
                     if (i == null) result.success(false)
-                    else { AppBarService.start(this, pkg); startActivity(i); result.success(true) }
+                    else { startActivity(i); result.success(true) }
                 }
                 else -> result.notImplemented()
             }
@@ -73,6 +83,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
         appsChannel(engine)
+        nav = MethodChannel(engine.dartExecutor.binaryMessenger, "echo_screen/nav")
+        tellNav(intent)
         MethodChannel(engine.dartExecutor.binaryMessenger, "echo_screen/keys").setMethodCallHandler { call, result ->
             if (call.method == "isRound") {             // the Echo Spot's round glass (and debug.echoscreen.round=1 for screenshots)
                 val prop = try {
@@ -96,7 +108,7 @@ class MainActivity : FlutterActivity() {
                     "product" to android.os.Build.PRODUCT)); return@setMethodCallHandler
             }
             if (call.method == "hasInputMethod") {      // an Echo: none; elsewhere the device's own keyboard types
-                // this app's own (EchoKeyboard, for the apps it starts) does not count: it never comes up for this app
+                // hassmic's shell's keyboard counts: it types into this app's pages too
                 val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
                 result.success(imm.enabledInputMethodList.any { it.packageName != packageName }); return@setMethodCallHandler
             }

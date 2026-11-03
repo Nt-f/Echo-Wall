@@ -1,11 +1,11 @@
 // Echo-Wall: Home Assistant on an Echo Show as Apple's HomeView shows a home (lib/home/), on Echo-Screen
 // (the template this is a fork of: the contract with hassmic, the web screens, the keyboard, hassmic's pictures).
-// The WallView is the first screen; the integration's screens follow it in the switcher and as tiles on Home.
+// The WallView is the first screen; the integration's screens follow it in hassmic's bar and as tiles on Home.
 //
 // Echo-Screen: a screen app for an Echo Show running hassmic (echo-dot-assist docs/screen-apps.md), in Flutter.
 // It does what hassmic's own Java kiosk does, as a template to build on: the screens Home Assistant's hassmic
 // integration chose (Home Assistant's dashboards, Music Assistant, any page) in a WebView, logged into Home Assistant
-// with the Echo's own token, a swipe down from the top edge to switch, back to the start screen after a while untouched, and
+// with the Echo's own token, hassmic's bar (pulled down from the top edge) to switch, back to the start screen after a while untouched, and
 // a keyboard of its own (the Echo has none).  Fork it and replace the WebView with widgets of your own: the config
 // (lib/hassmic.dart) gives Home Assistant's address and a token for its websocket API too.
 import 'dart:async';
@@ -60,7 +60,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   final feed = EchoStateFeed();
   EchoState echo = const EchoState();
   final ha = Ha();
-  final apps = Apps();                          // the owner's other apps: the switcher's and Home's (apps.dart)
+  final apps = Apps();                          // the owner's other apps: Home's cards (apps.dart)
   Layout? layout;
   static const home = -2;                       // `current` while the WallView shows
   ScreenConfig? cfg;
@@ -70,10 +70,10 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   String injectedFor = '';
   String loaded = '';                           // the page the WebView has (under the clock too)
   DateTime touched = DateTime.now();
-  bool bar = false, typing = false, numbers = false;
+  bool typing = false, numbers = false;
   bool ownKeyboard = true;                      // false where the device has an input method of its own (not an Echo)
   bool round = false;                           // a round screen (Echo Spot): nothing near its corners
-  Timer? poller, hideBar;
+  Timer? poller;
   // without hassmic (a tablet): the app's own login to Home Assistant (lib/login.dart)
   HaLogin? login;
   int _misses = 0;                              // hassmic's config asked for and not had, since the start
@@ -106,6 +106,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
       sync.publishApps(apps.list);
       apps.addListener(() => sync.publishApps(apps.list));
     });
+    const MethodChannel('echo_screen/nav').setMethodCallHandler((m) async { if (mounted) _nav(m); });
     _schedule(Duration.zero);
     feed.start((s) {                            // the words, a ring, the clock's next alarm, the screen's mode
       if (!mounted) return;
@@ -135,14 +136,14 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     final now = s == AppLifecycleState.resumed;
     if (now == front) return;
     front = now;
-    if (now) apps.lent = false;                 // back from the app it started (Back there, or the app bar's Home)
+    if (now) apps.lent = false;                 // back from the app it started (Back there, or the Home of hassmic's bar)
     _schedule(Duration.zero);                   // /front or /back at once: hassmic takes or gives the screen by them
   }
 
   void _schedule(Duration d) {
     poller?.cancel();
     poller = Timer(d, () async {
-      // paused for an app it started: the app bar's process polls /lent meanwhile; a /back here would end that
+      // paused for an app it started: hassmic's watcher says what is in front meanwhile; a /back here would end that
       if (!front && apps.lent) { _schedule(const Duration(seconds: 30)); return; }
       final c = await hassmic.poll(front: front);
       if (!mounted) return;
@@ -229,7 +230,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
 
   void _stop() {
     loaded = '';
-    setState(() { web = null; current = -1; typing = false; bar = false; });    // the WebView goes with its widget
+    setState(() { web = null; current = -1; typing = false; });    // the WebView goes with its widget
   }
 
   static String _origin(String u) {
@@ -239,7 +240,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   }
 
   void _home() {
-    setState(() { current = home; bar = false; typing = false; });
+    setState(() { current = home; typing = false; });
     touched = DateTime.now();
   }
 
@@ -249,7 +250,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   void _openPath(String path) {
     final c = cfg, w = web;
     if (c == null || w == null || c.ha.isEmpty) return;
-    setState(() { current = dashView; bar = false; typing = false; });
+    setState(() { current = dashView; typing = false; });
     touched = DateTime.now();
     final url = '${c.ha}$path';
     if (url != loaded) _load(c, w, url);
@@ -258,7 +259,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
   void _show(int i) {
     final c = cfg, w = web;
     if (c == null || w == null || i < 0 || i >= c.screens.length) return;
-    setState(() { current = i; bar = false; typing = false; });
+    setState(() { current = i; typing = false; });
     touched = DateTime.now();
     final url = c.screens[i].url;
     if (!_offered(c.screens[i])) { _home(); return; }   // the clock, the old wall: the WallView instead
@@ -313,11 +314,6 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
                   apps: apps.list, onApp: _launch, onDashboard: _openPath,
                   settings: layout!.settingsOver(c.settings), nextAlarm: echo.nextAlarmText, round: round, echo: echo),
             ))),
-          // open: a touch anywhere else, or a swipe up, puts it away (the touch goes no further: it was for the bar)
-          if (bar) Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _hideBar,
-              onVerticalDragUpdate: (d) { if (d.delta.dy < -2) _hideBar(); })),
-          _handle(),
-          if (bar) _switcher(c),
         ])),
         if (typing && ownKeyboard && current != home)
           Keyboard(
@@ -345,77 +341,19 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     ));
   }
 
-  // pulled down from the top edge, as the app bar over the other apps (AppBarService.kt) opens: nothing drawn there
-  // (the owner's choice: no pill over the pages), and a tap does nothing, so only a swipe down opens it
-  Widget _handle() => Align(
-        alignment: Alignment.topCenter,
-        child: FractionallySizedBox(widthFactor: .4, child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onVerticalDragUpdate: (d) { if (!bar && d.delta.dy > 2) _showBar(); },
-          child: const SizedBox(height: 24),
-        )),
-      );
-
-  void _showBar() {
-    setState(() => bar = true);
-    hideBar?.cancel();
-    hideBar = Timer(const Duration(seconds: 8), _hideBar);
+  // the bar of places (Home, the screens, the apps) is hassmic's shell's, over this app as over every other (echo-dot-assist
+  // docs/screen-apps.md "The shell"): it starts this activity with the screen it was asked for (MainActivity onNewIntent)
+  void _nav(MethodCall m) {
+    final c = cfg;
+    if (m.method == 'home') { _home(); return; }
+    if (m.method == 'screen' && c != null) {
+      final i = c.screens.indexWhere((s) => s.name == m.arguments);
+      if (i >= 0) _show(i);
+    }
   }
 
-  void _hideBar() { hideBar?.cancel(); if (mounted) setState(() => bar = false); }
-
-  // the switcher: the same bar as the one over the other apps (AppBarService.kt), so that it is one bar wherever one is:
-  // dropped from the top edge, dark glass, a column of icon and name per place (Home first, then the integration's
-  // screens, then the owner's apps), the one shown lit; scrolled sideways where it does not fit (a Spot's 320 dp), on a
-  // round screen lower (the circle's chord at the top is short)
-  Widget _switcher(ScreenConfig c) => LayoutBuilder(builder: (context, box) => Align(
-        alignment: Alignment.topCenter,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: -120, end: 0), duration: const Duration(milliseconds: 180), curve: Curves.easeOut,
-          builder: (_, y, child) => Transform.translate(offset: Offset(0, y), child: child),
-          child: GestureDetector(
-           onVerticalDragUpdate: (d) { if (d.delta.dy < -2) _hideBar(); },       // swiped back up
-           child: Container(
-            margin: EdgeInsets.only(top: round ? box.maxHeight * .2 : 12, left: 16, right: 16),
-            constraints: BoxConstraints(maxWidth: box.maxWidth * (round ? .86 : 1) - 32),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: const Color(0xe6202124), borderRadius: BorderRadius.circular(22)),
-            child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize: MainAxisSize.min, children: [
-              _item('Home', current == home, _home, icon: Icons.home_rounded),
-              for (var i = 0; i < c.screens.length; i++)
-                if (_offered(c.screens[i])) _item(c.screens[i].name, i == current, () => _show(i), icon: _screenIcon(c.screens[i].name)),
-              for (final a in apps.list) _item(a.label, false, () => _launch(a.package), png: a.icon),
-              if (current != home) _item('Reload', false, () { _hideBar(); web?.reload(); }, icon: Icons.refresh_rounded),
-            ])),
-          )),
-        ),
-      ));
-
-  static IconData _screenIcon(String name) => RegExp('music', caseSensitive: false).hasMatch(name) ? Icons.music_note_rounded
-      : RegExp('clock', caseSensitive: false).hasMatch(name) ? Icons.schedule_rounded
-      : RegExp('assistant|home', caseSensitive: false).hasMatch(name) ? Icons.dashboard_rounded : Icons.public_rounded;
-
-  /// one place in the bar, as AppBarService.item draws it: 84 dp wide, a 48 dp icon, the name under it, lit when shown
-  Widget _item(String label, bool current, VoidCallback onTap, {IconData? icon, Uint8List? png}) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 84, margin: const EdgeInsets.symmetric(horizontal: 2), padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
-          decoration: current ? BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(14)) : null,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(width: 48, height: 48, child: png != null
-                ? Image.memory(png, gaplessPlayback: true, filterQuality: FilterQuality.medium)
-                : DecoratedBox(decoration: BoxDecoration(color: const Color(0x2effffff), borderRadius: BorderRadius.circular(12)),
-                    child: Icon(icon, color: Colors.white, size: 28))),
-            const SizedBox(height: 4),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 12)),
-          ]),
-        ),
-      );
-
-  /// another app of the owner's, with the app bar over it (apps.dart); Home's cards and the switcher's pills
+  /// another app of the owner's (apps.dart): Home's cards; the shell's bar brings this app back
   void _launch(String package) {
-    _hideBar();
     apps.launch(package);
   }
 }

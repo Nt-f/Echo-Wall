@@ -1,5 +1,5 @@
 // An app of the owner's on Home (a YouTube client, a music app: ../apps.dart): its own icon on the glass, as a screen's
-// tile is drawn, and a tap starts it with the app bar over it.
+// tile is drawn, and a tap starts it (hassmic's bar, pulled down from the top edge, comes back here).
 import 'dart:math';
 import 'dart:typed_data';
 

@@ -1,7 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- the app bar over the apps it starts (AppBarService.kt); root's main.sh allows the app op on an Echo -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <application
         android:label="Echo-Wall"
         android:usesCleartextTraffic="true"
@@ -36,20 +34,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- the bar over the apps this app starts, and their keyboard: a light process of their own, apart from Flutter
-             (AppBarService.kt, EchoKeyboard.kt) -->
-        <service android:name=".AppBarService" android:process=":bar" android:exported="false" />
-        <service
-            android:name=".EchoKeyboard"
-            android:process=":bar"
-            android:label="Echo-Wall keyboard"
-            android:permission="android.permission.BIND_INPUT_METHOD"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.view.InputMethod" />
-            </intent-filter>
-            <meta-data android:name="android.view.im" android:resource="@xml/method" />
-        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
