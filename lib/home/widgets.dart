@@ -263,7 +263,7 @@ class NowPlayingCard extends StatelessWidget {
     final top = (idle ? 'Not Playing' : title ?? st?.name ?? '').toUpperCase();
     final under = idle || title == null ? st?.name ?? '' : '${st?.attr['media_artist'] ?? st?.attr['media_album_name'] ?? ''}';
     final playing = st?.state == 'playing';
-    void c(String s) => ha.call('media_player', s, id);
+    void c(String s) => s == 'media_play_pause' ? ha.playPause(id) : ha.call('media_player', s, id);
     Widget cover(double note) => pic != null
         ? Image.network(ha.image(pic).toString(), headers: ha.authHeader, fit: BoxFit.cover, gaplessPlayback: true,
             errorBuilder: (_, _, _) => Container(color: const Color(0xff2a2f45)))

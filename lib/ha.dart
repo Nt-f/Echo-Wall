@@ -183,7 +183,28 @@ class Ha extends ChangeNotifier {
 
   Future<void> call(String domain, String service, String entity, [Map<String, dynamic> data = const {}]) =>
       send({'type': 'call_service', 'domain': domain, 'service': service, 'service_data': data, 'target': {'entity_id': entity}})
-          .catchError((_) => null);
+          .catchError((e) { debugPrint('ha: $domain.$service $entity: $e'); return null; });
+
+  /// play or pause a player.  Paused where it can pause; where it cannot, or the pause fails, stopped: Music
+  /// Assistant playing an AirPlay stream from a phone (its AirPlay receiver plugin) took media_play_pause and did
+  /// nothing, the button looked dead
+  Future<void> playPause(String id) async {
+    final st = states[id];
+    final f = (st?.numAttr('supported_features') ?? 0).toInt();
+    debugPrint('ha: play/pause $id: ${st?.state}, features $f, source ${st?.attr['source']}, app ${st?.attr['app_id'] ?? st?.attr['app_name']}');
+    if (st?.state != 'playing') return call('media_player', 'media_play', id);
+    Future<dynamic> svc(String s) => send({'type': 'call_service', 'domain': 'media_player', 'service': s, 'target': {'entity_id': id}});
+    try {
+      if (f & 1 != 0) return await svc('media_pause');
+    } catch (e) {
+      debugPrint('ha: media_pause $id: $e; stopping instead');
+    }
+    try {
+      await svc('media_stop');
+    } catch (e) {
+      debugPrint('ha: media_stop $id: $e');
+    }
+  }
 
   /// an image of Home Assistant's (a camera, a cover): the address, with the login as a header for Image.network
   Uri image(String path) => Uri.parse(_url).resolve(path);

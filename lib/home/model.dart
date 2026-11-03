@@ -109,7 +109,7 @@ bool tap(Ha ha, String id) {
     case 'cover':
       ha.call(d, st.state == 'open' || st.state == 'opening' ? 'close_cover' : 'open_cover', id); return true;
     case 'media_player':
-      ha.call(d, 'media_play_pause', id); return true;
+      ha.playPause(id); return true;
     case 'scene': case 'script':
       ha.call(d, 'turn_on', id); return true;
     case 'vacuum':

@@ -118,7 +118,7 @@ class HomeView extends StatefulWidget {
   State<HomeView> createState() => _HomeViewState();
 }
 
-class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
+class _HomeViewState extends State<HomeView> with TickerProviderStateMixin, WidgetsBindingObserver {
   final pc = PageController();
   int page = 0;
   bool editing = false, ambient = false;
@@ -156,9 +156,18 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
 
   int? ambientOverride;                         // debug.hassmic.ambient (screenshots)
 
+  /// the app in front with its screen on (Android pauses the activity when the screen goes off or another app comes)
+  bool resumed = true;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    final r = s == AppLifecycleState.resumed;
+    if (r != resumed) setState(() => resumed = r);
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     wobble = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
     const MethodChannel('hassmic/keys').invokeMethod<String>('prop', 'debug.hassmic.ambient').then((v) {
       final n = int.tryParse(v ?? '');
@@ -173,7 +182,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   }
 
   @override
-  void dispose() { idle?.cancel(); _wallTimer?.cancel(); _edgeFlip?.cancel(); wobble.dispose(); pc.dispose(); backdrop.dispose(); super.dispose(); }
+  void dispose() { WidgetsBinding.instance.removeObserver(this); idle?.cancel(); _wallTimer?.cancel(); _edgeFlip?.cancel(); wobble.dispose(); pc.dispose(); backdrop.dispose(); super.dispose(); }
 
   void edit(bool on) {
     setState(() { editing = on; ambient = false; });
@@ -360,6 +369,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         }))),
         // resting: the lock screen over the HomeView, lifted off by a swipe up
         if (ambient) Positioned.fill(child: LockScreen(photos: photos..configure(widget.settings), ha: ha, h24: widget.h24,
+            player: lay.nowPlaying ? nowPlayer() : null,
             nextAlarm: widget.nextAlarm, minutes: int.tryParse(widget.settings['photos.minutes'] ?? '') ?? 3, round: widget.round,
             onUnlock: () { touched = DateTime.now(); setState(() => ambient = false); })),
         // the voice assistant and the alarms, on the glass, over everything (the lock screen too)
@@ -377,7 +387,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       Kind.date => Press(onTap: () => showWeather(context, ha, p, backdrop), child: DateWeatherCard(ha: ha, p: p, cell: cell)),
       Kind.thermo => ThermostatCard(ha: ha, p: p, id: it.id!, cell: cell, onLong: more),
       Kind.playing => NowPlayingCard(ha: ha, p: p, id: it.id!, cell: cell, size: it.size, onLong: more),
-      Kind.camera => CameraCard(ha: ha, p: p, id: it.id!, cell: cell, live: !ambient && !editing),
+      // live under the lock screen too, so that it is there the moment the screen is woken (a stream started then took
+      // seconds: Home Assistant's HLS, the decoder); off only with the screen or in edit mode (the lifted copy would
+      // start a second one)
+      Kind.camera => CameraCard(ha: ha, p: p, id: it.id!, cell: cell, live: resumed && !editing),
       Kind.screen => ScreenTile(p: p, name: it.name, cell: cell, onTap: () => widget.onScreen(it.screen)),
       Kind.tile => AccessoryTile(ha: ha, p: p, id: it.id!, room: it.room, cell: cell, onLong: more),
     };
