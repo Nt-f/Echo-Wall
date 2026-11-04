@@ -31,6 +31,13 @@ class LCard {
         for (final e in (c['entities'] as List? ?? const []))
           if (e is String) e else if (e is Map && e['entity'] is String) e['entity'] as String
       ];
+  /// the name the card gives its entity (Lovelace's `name:`), else none: the entity's own
+  String? get name => c['name'] is String && (c['name'] as String).trim().isNotEmpty ? (c['name'] as String).trim() : null;
+  /// the names an entities or glance card gives its rows ({entity, name})
+  Map<String, String> get names => {
+        for (final e in (c['entities'] as List? ?? const []))
+          if (e is Map && e['entity'] is String && e['name'] is String) e['entity'] as String: e['name'] as String
+      };
   bool get native => const {'tile', 'thermostat', 'media-control', 'entities', 'glance', 'button', 'picture-entity', 'picture-glance',
         'weather-forecast', 'heading'}.contains(type);
 
@@ -119,21 +126,36 @@ class NativeCard extends StatelessWidget {
       case 'tile':
       case 'button':
         if (!ha.states.containsKey(id)) return _missing(id, cell);
-        return AccessoryTile(ha: ha, p: p, id: id, cell: cell, onLong: none, holdOpens: false, size: sz == CardSize.xl ? CardSize.l : sz);
+        return AccessoryTile(ha: ha, p: p, id: id, cell: cell, onLong: none, holdOpens: false, size: sz == CardSize.xl ? CardSize.l : sz, label: card.name);
       case 'thermostat':
-        return ThermostatCard(ha: ha, p: p, id: id, cell: cell, onLong: none, holdOpens: false, size: sz == CardSize.xl ? CardSize.l : sz);
+        return ThermostatCard(ha: ha, p: p, id: id, cell: cell, onLong: none, holdOpens: false, size: sz == CardSize.xl ? CardSize.l : sz, label: card.name);
       case 'media-control':
         return NowPlayingCard(ha: ha, p: p, id: id, cell: cell, size: sz, onLong: none, holdOpens: false);
       case 'picture-entity':
       case 'picture-glance':
-        return _Picture(ha: ha, p: p, id: card.entity ?? '', title: card.c['title'] as String?, cell: cell);
+        return _Picture(ha: ha, p: p, id: card.entity ?? '', title: card.c['title'] as String? ?? card.name, cell: cell);
       case 'entities':
-        return _Entities(ha: ha, p: p, ids: card.entities, title: card.c['title'] as String?, cell: cell, box: box);
+        return _Entities(ha: ha, p: p, ids: card.entities, names: card.names, title: card.c['title'] as String?, cell: cell, box: box);
       case 'glance':
-        return _Glance(ha: ha, p: p, ids: card.entities, cell: cell, box: box);
+        return _Glance(ha: ha, p: p, ids: card.entities, names: card.names, cell: cell, box: box);
       case 'weather-forecast':
         return _Weather(ha: ha, p: p, id: id, cell: cell, box: box);
       default:
+        // a card of HACS's (Mushroom, button-card, mini-graph-card...) is about an entity nearly always: that entity as
+        // the WallView draws its kind, with the card's name; only one about none (a chips row, a markdown) stays a tile
+        // that opens its view in Home Assistant's own UI
+        if (card.type.startsWith('custom:') && ha.states.containsKey(id)) {
+          final s = sz == CardSize.xl ? CardSize.l : sz;
+          return switch (domainOf(id)) {
+            'climate' => ThermostatCard(ha: ha, p: p, id: id, cell: cell, onLong: none, holdOpens: false, size: s, label: card.name),
+            'media_player' => NowPlayingCard(ha: ha, p: p, id: id, cell: cell, size: sz, onLong: none, holdOpens: false),
+            'camera' => _Picture(ha: ha, p: p, id: id, title: card.name, cell: cell),
+            'weather' => _Weather(ha: ha, p: p, id: id, cell: cell, box: box),
+            _ => card.entities.length > 1
+                ? _Entities(ha: ha, p: p, ids: card.entities, names: card.names, title: card.name ?? card.c['title'] as String?, cell: cell, box: box)
+                : AccessoryTile(ha: ha, p: p, id: id, cell: cell, onLong: none, holdOpens: false, size: s, label: card.name),
+          };
+        }
         return GestureDetector(onTap: onOpen, child: _Fallback(p: p, card: card, cell: cell, open: onOpen != null));
     }
   }
@@ -170,10 +192,11 @@ class _Entities extends StatelessWidget {
   final Ha ha;
   final Palette p;
   final List<String> ids;
+  final Map<String, String> names;              // the card's own names of its rows
   final String? title;
   final double cell;
   final Size box;
-  const _Entities({required this.ha, required this.p, required this.ids, required this.title, required this.cell, required this.box});
+  const _Entities({required this.ha, required this.p, required this.ids, this.names = const {}, required this.title, required this.cell, required this.box});
   @override
   Widget build(BuildContext context) {
     final rowH = min(44.0, (box.height - 16 - (title != null ? 26 : 0)) / max(1, ids.length));
@@ -184,7 +207,7 @@ class _Entities extends StatelessWidget {
         SizedBox(height: rowH, child: Row(children: [
           Icon(look(ha, id).icon, size: min(22, rowH * .55), color: look(ha, id).on ? look(ha, id).color : p.dim),
           const SizedBox(width: 10),
-          Expanded(child: Text(nameIn(ha, id, null), maxLines: 1, overflow: TextOverflow.ellipsis,
+          Expanded(child: Text(names[id] ?? nameIn(ha, id, null), maxLines: 1, overflow: TextOverflow.ellipsis,
               style: TextStyle(color: p.text, fontSize: min(14.5, rowH * .36), fontWeight: FontWeight.w500))),
           if (const {'light', 'switch', 'fan', 'input_boolean'}.contains(domainOf(id)))
             Transform.scale(scale: min(.8, rowH / 50), child: CupertinoSwitch(value: look(ha, id).on, onChanged: (_) {}, activeTrackColor: const Color(0xff30d158)))
@@ -207,16 +230,17 @@ class _Glance extends StatelessWidget {
   final Ha ha;
   final Palette p;
   final List<String> ids;
+  final Map<String, String> names;
   final double cell;
   final Size box;
-  const _Glance({required this.ha, required this.p, required this.ids, required this.cell, required this.box});
+  const _Glance({required this.ha, required this.p, required this.ids, this.names = const {}, required this.cell, required this.box});
   @override
   Widget build(BuildContext context) {
     final s = min(box.height / 4.2, 30.0);
     return Glass(p: p, cell: cell, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), child: Row(children: [
       for (final id in ids)
         Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(nameIn(ha, id, null), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.dim, fontSize: s * .42)),
+          Text(names[id] ?? nameIn(ha, id, null), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.dim, fontSize: s * .42)),
           SizedBox(height: s * .15),
           Icon(look(ha, id).icon, size: s, color: look(ha, id).on ? look(ha, id).color : p.text),
           SizedBox(height: s * .15),

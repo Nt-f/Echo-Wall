@@ -42,7 +42,7 @@ void main() {
   });
 
   testWidgets('every card at every size: nothing overflows; the picture of them all', (t) async {
-    t.view.physicalSize = const Size(1960, 5500);
+    t.view.physicalSize = const Size(1960, 7000);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     final ha = Ha()..connected = true;

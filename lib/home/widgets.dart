@@ -153,13 +153,14 @@ class AccessoryTile extends StatelessWidget {
   final VoidCallback onLong;
   final bool holdOpens;                         // a long press opens the detail (the category sheets); the WallView's own hold is its menu
   final CardSize size;                          // s: Apple's tile; m: the badge beside the words; l: all of it bigger, a level bar
+  final String? label;                          // the name a dashboard's card gives it (Lovelace's `name:`), else its own
   const AccessoryTile({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong, this.room,
-      this.holdOpens = true, this.size = CardSize.s});
+      this.holdOpens = true, this.size = CardSize.s, this.label});
   @override
   Widget build(BuildContext context) {
     final l = look(ha, id), u = cell / 100;
     final fg = l.on ? p.textOn : p.text, dim = l.on ? p.dimOn : p.dim;
-    final name = nameIn(ha, id, room ?? ha.areaName(ha.areaOf(id)));
+    final name = label ?? nameIn(ha, id, room ?? ha.areaName(ha.areaOf(id)));
     final big = size == CardSize.l || size == CardSize.xl, wide = size == CardSize.m;
     final badge = (big ? 40 : wide ? 32 : 26) * u;
     final circle = AnimatedContainer(
@@ -206,8 +207,9 @@ class ThermostatCard extends StatefulWidget {
   final VoidCallback onLong;
   final bool holdOpens;
   final CardSize size;                          // l: Apple's thermostat; s: the same in a cell; m: the number beside the words
+  final String? label;                          // the name a dashboard's card gives it (Lovelace's `name:`), else its own
   const ThermostatCard({super.key, required this.ha, required this.p, required this.id, required this.cell, required this.onLong,
-      this.holdOpens = true, this.size = CardSize.l});
+      this.holdOpens = true, this.size = CardSize.l, this.label});
   @override
   State<ThermostatCard> createState() => _ThermostatCardState();
 }
@@ -279,6 +281,7 @@ class _ThermostatCardState extends State<ThermostatCard> {
     };
     final cur = st?.numAttr('current_temperature');
     final room = widget.ha.areaName(widget.ha.areaOf(widget.id));
+    final name = widget.label ?? nameIn(widget.ha, widget.id, room);
     final off = mode == 'off';
     Widget chevron(IconData i, int d) => Press(onTap: off ? null : () => nudge(d), depth: .12,
         child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(i, size: 11 * u, color: off ? p.dim : p.text)));
@@ -319,7 +322,7 @@ class _ThermostatCardState extends State<ThermostatCard> {
           Flexible(flex: 5, child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: number)),
           SizedBox(width: 6 * u),
           Expanded(flex: 4, child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(nameIn(widget.ha, widget.id, room), maxLines: 1, overflow: TextOverflow.ellipsis,
+            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(12, 8.5 * u))),
             DefaultTextStyle.merge(style: TextStyle(fontSize: max(11, 6.8 * u)), child: status),
           ])),
@@ -331,11 +334,12 @@ class _ThermostatCardState extends State<ThermostatCard> {
     return Press(
       onTap: widget.onLong, onLongPress: widget.holdOpens ? widget.onLong : null, depth: .025,
       child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: glow(Stack(children: [
-        Center(child: Padding(padding: EdgeInsets.fromLTRB(6 * u, 0, 6 * u, 12 * u), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // the name along the top, as Apple's tiles have theirs (under the number it was lost: 11 px on a Show 5)
+        Positioned(left: max(18, 8 * u), top: max(15, 6 * u), right: max(18, 8 * u), child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(12, 7 * u)))),
+        Center(child: Padding(padding: EdgeInsets.fromLTRB(6 * u, 12 * u, 6 * u, 12 * u), child: Column(mainAxisSize: MainAxisSize.min, children: [
           FittedBox(fit: BoxFit.scaleDown, child: number),
           SizedBox(height: 3 * u),
-          Text(nameIn(widget.ha, widget.id, room), maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(11, 5.4 * u))),
           DefaultTextStyle.merge(style: TextStyle(fontSize: max(10, 4.8 * u)), child: status),
         ]))),
         // the chevrons, as on Apple's thermostat card: no ripple, a press that gives

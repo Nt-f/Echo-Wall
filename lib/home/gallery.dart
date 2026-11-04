@@ -43,6 +43,11 @@ class CardGallery extends StatelessWidget {
       if (listed.isNotEmpty) ('Entities (dashboard)', Item(Kind.card, cardKey: 'card:entities', card: c({'type': 'entities', 'title': 'Doors', 'entities': listed}))),
       if (sensors.isNotEmpty) ('Glance (dashboard)', Item(Kind.card, cardKey: 'card:glance', card: c({'type': 'glance', 'entities': sensors}))),
       if (weather != null) ('Weather (dashboard)', Item(Kind.card, cardKey: 'card:weather', card: c({'type': 'weather-forecast', 'entity': weather}))),
+      if (single != null) ('Thermostat, its card\'s name (dashboard)', Item(Kind.card, cardKey: 'card:thermostat', card: c({'type': 'thermostat', 'entity': single, 'name': 'Upstairs'}))),
+      // HACS's cards: drawn as the WallView draws their entity, with their name
+      if (single != null) ('Mushroom climate (HACS)', Item(Kind.card, cardKey: 'card:mushroom-climate', card: c({'type': 'custom:mushroom-climate-card', 'entity': single, 'name': 'Bedroom'}))),
+      if (light != null) ('Mushroom light (HACS)', Item(Kind.card, cardKey: 'card:mushroom-light', card: c({'type': 'custom:mushroom-light-card', 'entity': light}))),
+      if (sensors.isNotEmpty) ('Mini graph (HACS)', Item(Kind.card, cardKey: 'card:mini-graph', card: c({'type': 'custom:mini-graph-card', 'name': 'Climate', 'entities': sensors}))),
       ('Card it cannot draw', Item(Kind.card, cardKey: 'card:custom', card: c({'type': 'custom:mushroom-chips-card'}))),
     ];
   }
