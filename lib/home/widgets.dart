@@ -192,10 +192,26 @@ class AccessoryTile extends StatelessWidget {
       onLongPress: holdOpens ? onLong : null,
       child: Opacity(
         opacity: l.unavailable ? .5 : 1,
-        child: Hero(tag: 'tile/$id', child: Glass(p: p, cell: cell, on: l.on, padding: EdgeInsets.all((big ? 14 : 10) * u), child: body)),
+        child: Hero(tag: 'tile/$id', flightShuttleBuilder: _flight, child: Glass(p: p, cell: cell, on: l.on, padding: EdgeInsets.all((big ? 14 : 10) * u), child: body)),
       ),
     );
   }
+}
+
+/// a tile in flight to or from its detail: in the overlay, with no Material over it, its words took Flutter's fallback
+/// style (yellow, double underlined) until it landed
+Widget _flight(BuildContext _, Animation<double> _, HeroFlightDirection dir, BuildContext from, BuildContext to) =>
+    Material(type: MaterialType.transparency, child: (dir == HeroFlightDirection.push ? from : to).widget is Hero
+        ? ((dir == HeroFlightDirection.push ? from : to).widget as Hero).child : const SizedBox());
+
+/// a thermostat's name on its card: Home Assistant's integrations often call the entity just "Thermostat" (or "Hallway
+/// Thermostat" in the Hallway): its room says which one, the kind of device is plain from the card
+const _generic = {'thermostat', 'climate', 'hvac', 'heating', 'heat pump', 'air conditioner', 'ac'};
+String thermostatName(Ha ha, String id) {
+  final room = ha.areaName(ha.areaOf(id));
+  final full = nameIn(ha, id, null), short = nameIn(ha, id, room);
+  if (room.isNotEmpty && (short != full || _generic.contains(short.toLowerCase().trim()))) return room;
+  return full;
 }
 
 /// the thermostat: its set temperature big, arrows to change it (sent once the arrows rest)
@@ -280,8 +296,7 @@ class _ThermostatCardState extends State<ThermostatCard> {
         },
     };
     final cur = st?.numAttr('current_temperature');
-    final room = widget.ha.areaName(widget.ha.areaOf(widget.id));
-    final name = widget.label ?? nameIn(widget.ha, widget.id, room);
+    final name = widget.label ?? thermostatName(widget.ha, widget.id);
     final off = mode == 'off';
     Widget chevron(IconData i, int d) => Press(onTap: off ? null : () => nudge(d), depth: .12,
         child: Padding(padding: EdgeInsets.all(4 * u), child: Icon(i, size: 11 * u, color: off ? p.dim : p.text)));
@@ -316,7 +331,7 @@ class _ThermostatCardState extends State<ThermostatCard> {
     if (widget.size == CardSize.m) {
       return Press(
         onTap: widget.onLong, onLongPress: widget.holdOpens ? widget.onLong : null, depth: .025,
-        child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: glow(Padding(padding: EdgeInsets.symmetric(horizontal: 8 * u),
+        child: Hero(tag: 'tile/${widget.id}', flightShuttleBuilder: _flight, child: Glass(p: p, cell: widget.cell, big: true, child: glow(Padding(padding: EdgeInsets.symmetric(horizontal: 8 * u),
             child: Row(children: [
           // the number its share, the words theirs: a range (20–24) would take the whole width and leave "E…" of the name
           Flexible(flex: 5, child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: number)),
@@ -333,7 +348,7 @@ class _ThermostatCardState extends State<ThermostatCard> {
     }
     return Press(
       onTap: widget.onLong, onLongPress: widget.holdOpens ? widget.onLong : null, depth: .025,
-      child: Hero(tag: 'tile/${widget.id}', child: Glass(p: p, cell: widget.cell, big: true, child: glow(Stack(children: [
+      child: Hero(tag: 'tile/${widget.id}', flightShuttleBuilder: _flight, child: Glass(p: p, cell: widget.cell, big: true, child: glow(Stack(children: [
         // the name along the top, as Apple's tiles have theirs (under the number it was lost: 11 px on a Show 5)
         Positioned(left: max(18, 8 * u), top: max(15, 6 * u), right: max(18, 8 * u), child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
             style: TextStyle(color: p.text, fontWeight: FontWeight.w700, fontSize: max(12, 7 * u)))),

@@ -579,7 +579,14 @@ class _WallViewState extends State<WallView> with TickerProviderStateMixin, Widg
             PageView.custom(
               controller: pc,
               physics: editing ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(parent: PageScrollPhysics()),
-              onPageChanged: (i) => setState(() { page = i; if (i < ps.length) _viewing = (ps[i].group, ps[i].index); }),
+              // no setState outside the edit mode: halfway through a swipe that built the whole WallView again (every
+              // page group packed), a frame of 70-100 ms on the Show 5 in the middle of the swipe; the dots follow the
+              // scroll themselves.  The edit bar is the page's (+ Add, Rename): there it builds again
+              onPageChanged: (i) {
+                page = i;
+                if (i < ps.length) _viewing = (ps[i].group, ps[i].index);
+                if (editing) setState(() {});
+              },
               childrenDelegate: SliverChildBuilderDelegate(childCount: ps.length, addRepaintBoundaries: false, (context, i) => _grid(ps, i, cols, rows, cw + gap, cell + gap, Padding(
                 padding: EdgeInsets.fromLTRB(pad, pad + (editing ? 44 : 0), pad, bottom),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1316,12 +1323,14 @@ class _WallViewState extends State<WallView> with TickerProviderStateMixin, Widg
           final mid = row.size.width / 2, x = row.globalToLocal(d.globalPosition).dx;
           (x < mid ? pc.previousPage : pc.nextPage)(duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
         },
-        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Row(mainAxisSize: MainAxisSize.min, children: [
-
-          for (var i = 0; i < ps.length; i++)
-            Container(margin: const EdgeInsets.symmetric(horizontal: 3), width: 6, height: 6,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: p.dim.withValues(alpha: i == page ? 1 : .45))),
-        ])),
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: AnimatedBuilder(animation: pc, builder: (_, _) {
+          final at = pc.hasClients && pc.positions.length == 1 && pc.page != null ? pc.page!.round() : page;   // the page under the scroll, as it moves
+          return Row(mainAxisSize: MainAxisSize.min, children: [
+            for (var i = 0; i < ps.length; i++)
+              Container(margin: const EdgeInsets.symmetric(horizontal: 3), width: 6, height: 6,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: p.dim.withValues(alpha: i == at ? 1 : .45))),
+          ]);
+        })),
       )));
 }
 

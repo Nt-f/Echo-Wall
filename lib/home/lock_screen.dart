@@ -122,23 +122,32 @@ class _LockScreenState extends State<LockScreen> with TickerProviderStateMixin {
                   child: Padding(padding: EdgeInsets.fromLTRB(4 * u, 4 * u, 4 * u, at.clock.y > .3 ? 4 * u : 13 * u),
                       child: _NowPlaying(ha: widget.ha, id: id, u: u)),
                 ),
-                // how to open it, always there: a chevron over the words on a capsule of dark glass (white text alone
-                // went under in a bright sky or snow), sized with the screen; a tap lifts it once
-                Positioned(left: 0, right: 0, bottom: 3.2 * u, child: AnimatedBuilder(animation: hint, builder: (_, _) {
-                  final t = sin(hint.value * pi);
-                  return Transform.translate(offset: Offset(0, -3 * u * t), child: Center(child: Container(
-                    padding: EdgeInsets.fromLTRB(4.4 * u, 1.4 * u, 4.4 * u, 1.8 * u),
-                    decoration: ShapeDecoration(color: Color.fromRGBO(0, 0, 0, .42 + .14 * t),
-                        shape: const StadiumBorder(side: BorderSide(color: Color(0x33ffffff), width: 1)),
-                        shadows: const [BoxShadow(color: Color(0x40000000), blurRadius: 16, offset: Offset(0, 4))]),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(CupertinoIcons.chevron_up, color: Colors.white, size: 4.4 * u),
-                      SizedBox(width: 1.6 * u),
-                      Text('Swipe up to open', style: TextStyle(color: Colors.white, fontSize: 4.4 * u, fontWeight: FontWeight.w600,
-                          letterSpacing: -.1)),
-                    ]),
-                  )));
-                })),
+                // how to open it, part of the screen's bottom edge as a phone's lock screen has it: a shade rising from
+                // the edge (white words alone went under in a bright sky or snow: a capsule of dark glass did, before,
+                // and stood apart from the photo), the words over a home bar; it comes up out of the edge when the lock
+                // screen does, gives way as the screen is lifted, and a tap lifts it once to show how
+                Positioned(left: 0, right: 0, bottom: 0, height: 24 * u, child: IgnorePointer(child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 1, end: 0), duration: const Duration(milliseconds: 700), curve: Curves.easeOutCubic,
+                  builder: (_, enter, _) => AnimatedBuilder(animation: hint, builder: (_, _) {
+                    final t = sin(hint.value * pi);
+                    final gone = size.height > 0 ? (drag / (size.height * .22)).clamp(0.0, 1.0) : 0.0;
+                    final show = (1 - enter) * (1 - gone);
+                    return Opacity(opacity: show, child: Transform.translate(offset: Offset(0, 8 * u * enter), child: Stack(fit: StackFit.expand, children: [
+                      const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                          colors: [Color(0x00000000), Color(0x59000000)]))),
+                      Align(alignment: Alignment.bottomCenter, child: Padding(padding: EdgeInsets.only(bottom: 2.2 * u),
+                          child: Transform.translate(offset: Offset(0, -2.5 * u * t), child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(CupertinoIcons.chevron_up, color: Colors.white.withValues(alpha: .75 + .25 * t), size: 3.6 * u,
+                            shadows: const [Shadow(blurRadius: 6, color: Color(0x80000000))]),
+                        Text('Swipe up to open', style: TextStyle(color: Colors.white.withValues(alpha: .85 + .15 * t), fontSize: 4 * u,
+                            fontWeight: FontWeight.w600, letterSpacing: .1, shadows: const [Shadow(blurRadius: 8, color: Color(0x99000000))])),
+                        SizedBox(height: 1.8 * u),
+                        Container(width: 30 * u, height: 1.1 * u, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .9),
+                            borderRadius: BorderRadius.circular(u), boxShadow: const [BoxShadow(blurRadius: 6, color: Color(0x66000000))])),
+                      ])))),
+                    ])));
+                  }),
+                ))),
                 if (p != null && p.credit.isNotEmpty)
                   Positioned(right: 10, bottom: 6, child: Text(p.credit,
                       style: const TextStyle(color: Color(0x99ffffff), fontSize: 10, shadows: [Shadow(blurRadius: 4)]))),
