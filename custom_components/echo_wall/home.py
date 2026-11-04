@@ -176,12 +176,24 @@ def _by(connection) -> str:
     vol.Optional("version", default=""): vol.All(str, vol.Length(max=40)),
     vol.Optional("screen"): vol.All([vol.All(vol.Coerce(int), vol.Range(min=100, max=8000))], vol.Length(min=2, max=2)),
     vol.Optional("screens", default=[]): vol.All([vol.All(str, vol.Length(max=60))], vol.Length(max=20)),
+    # the id this install had before (the app's lib/device.dart: a random one of an older version): moved to the new
+    # one, layout, apps and all, when it is this login's and the new one is not known yet
+    vol.Optional("replaces"): DEVICE,
 })
 @websocket_api.async_response
 async def ws_register(hass: HomeAssistant, connection, msg: dict) -> None:
     d = _data(hass)
     dev = d["devices"].get(msg["device"])
     uid = connection.user.id
+    old = msg.get("replaces")
+    if dev is None and old and old != msg["device"] and old in d["devices"] \
+            and (d["devices"][old].get("user") == uid or connection.user.is_admin):
+        dev = d["devices"][msg["device"]] = d["devices"].pop(old)
+        for k in ("layouts", "apps"):
+            if old in d[k]:
+                d[k][msg["device"]] = d[k].pop(old)
+        _LOGGER.info("device %s is %s now (moved, layout and all)", old, msg["device"])
+        async_dispatcher_send(hass, SIGNAL, old, "devices")
     if dev is None:
         if len(d["devices"]) >= MAX_DEVICES:
             connection.send_error(msg["id"], "invalid_format", f"{MAX_DEVICES} devices at most")

@@ -258,6 +258,22 @@ async def run(tmp):
             e = await k.fails(type="echo_wall/set", device=DEV, layout={"place": {"x": "y" * 70000}})
             check("64 KB" in e, "over the size cap: refused")
 
+            # a reinstall's stable id (lib/device.dart): the device it was moved to it, layout and all, by its own login only
+            await hall(type="echo_wall/register", device="dev_hall_random1", name="Hall")
+            await hall(type="echo_wall/set", device="dev_hall_random1", layout={"wallpaper": "dusk"})
+            r = await hall(type="echo_wall/register", device="echo-echo-show-5-abcdef", name="Hall", replaces="dev_hall_random1")
+            check(r.get("device") == "echo-echo-show-5-abcdef" and (await hall(type="echo_wall/get", device="echo-echo-show-5-abcdef")).get("wallpaper") == "dusk",
+                  f"a device moved to its stable id by its login: the layout with it ({r})")
+            e = await hall.fails(type="echo_wall/get", device="dev_hall_random1")
+            check(e != "", f"... the old id gone ({e or 'still there'})")
+            await k(type="echo_wall/register", device="android-0123456789ab", name="Kitchen 2", replaces="echo-echo-show-5-abcdef")
+            check((await hall(type="echo_wall/get", device="echo-echo-show-5-abcdef")).get("wallpaper") == "dusk"
+                  and (await k(type="echo_wall/get", device="android-0123456789ab")) == {},
+                  "another login naming it as replaced: a device of its own, the other's untouched")
+            await hall(type="echo_wall/register", device="echo-echo-show-5-abcdef", name="Hall", replaces="no-such-device")
+            check((await hall(type="echo_wall/get", device="echo-echo-show-5-abcdef")).get("wallpaper") == "dusk", "an unknown old id: nothing moved")
+            for dv in ("echo-echo-show-5-abcdef", "android-0123456789ab"): await admin(type="echo_wall/forget", device=dv)   # (the rest counts one device)
+
             # the app's first login with nothing here: its file goes up (layout_sync.dart's first event), the panel follows
             await k.subscribe(type="echo_wall/subscribe", device=DEV)
             first = await k.event()

@@ -46,7 +46,8 @@ Every feature in detail: [docs/guide.md](docs/guide.md). How the app, the integr
 3. The integration as in step 3 above: the tablet shows up in the Echo-Wall panel by itself.
 
 Updates: a newer release's APK installs over the old one the same way; nothing is lost (the layout lives in Home
-Assistant). Echo-Wall built by yourself (below) is signed with your own key and cannot update a released one in place:
+Assistant). Even a reinstall keeps the device in Home Assistant: on an Echo its id comes from the Echo,
+on a tablet from Android (Echo-Wall 1.1.1 on; an older install's id is moved over at its first login). Echo-Wall built by yourself (below) is signed with your own key and cannot update a released one in place:
 uninstall it first.
 
 ## Build

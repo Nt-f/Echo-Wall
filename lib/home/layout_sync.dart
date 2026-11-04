@@ -28,12 +28,18 @@ typedef DeviceInfo = Map<String, dynamic> Function();
 class LayoutSync {
   final Ha ha;
   final Layout layout;
-  final String device;
+  String device;                                // (the old id meanwhile where the integration cannot move it yet)
   final DeviceInfo info;
   String _agreed = '';                          // the last layout both sides had, as JSON
   bool _changed = false;                        // ours changed since this start and not sent yet
 
-  LayoutSync(this.ha, this.layout, {required this.device, required this.info}) {
+  /// the id this install had before (lib/device.dart): told at the login until Home Assistant moved it to [device]
+  String? replaces;
+  /// called once a login was taken (the id may be kept now)
+  final void Function()? onRegistered;
+  bool _noReplace = false;                      // an integration of before "replaces": the move waits for its update
+
+  LayoutSync(this.ha, this.layout, {required this.device, required this.info, this.replaces, this.onRegistered}) {
     layout.onSaved = _saved;
     ha.onConnected.add(_follow);
     if (ha.connected) _follow();
@@ -58,8 +64,11 @@ class LayoutSync {
       debugPrint('layout sync: not followed ($e)');      // not loaded yet, or no Echo-Wall integration: the file meanwhile
       if (link == _link && ha.connected) _again = Timer(retry, () { if (link == _link && ha.connected) _follow(); });
     }
-    ha.send({'type': 'echo_wall/register', 'device': device, ...info()}).then((_) {
+    final rep = _noReplace ? null : replaces;
+    ha.send({'type': 'echo_wall/register', 'device': device, ...info(), 'replaces': ?rep}).then((_) {
       if (link != _link) return;
+      if (rep != null) { debugPrint('layout sync: $rep moved to $device'); replaces = null; }
+      if (replaces == null) onRegistered?.call();
       ha.subscribe({'type': 'echo_wall/subscribe', 'device': device}, (ev) {
         final theirs = ((ev as Map)['layout'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
         final mine = layout.toJson();
@@ -77,7 +86,18 @@ class LayoutSync {
         debugPrint('layout sync: subscribed');
         _sendApps();
       }).catchError(again);
-    }).catchError(again);
+    }).catchError((Object e) {
+      // an integration that does not know "replaces" refuses the whole message: the old id goes on until it is
+      // updated (the new one registered now could never take the old one's place: a move needs it unknown)
+      if (rep != null && link == _link && e is Map && e['code'] == 'invalid_format') {
+        debugPrint('layout sync: the integration moves no device yet ($e): $rep goes on');
+        _noReplace = true;
+        device = rep;
+        _follow();
+        return null;
+      }
+      return again(e);
+    });
   }
 
   void _saved() {

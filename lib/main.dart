@@ -96,7 +96,7 @@ class _ScreenAppState extends State<ScreenApp> with WidgetsBindingObserver {
     Future.wait([Layout.load(), Device.load()]).then((r) {
       final l = r[0] as Layout, d = r[1] as Device;
       if (mounted) setState(() => layout = l);
-      final sync = LayoutSync(ha, l, device: d.id, info: () {
+      final sync = LayoutSync(ha, l, device: d.id, replaces: d.replaces, onRegistered: d.commit, info: () {
         final v = WidgetsBinding.instance.platformDispatcher.views.first;
         final c = cfg;
         return {'name': d.name, 'model': d.model, 'version': appVersion,

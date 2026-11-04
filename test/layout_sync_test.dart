@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:echo_screen/device.dart';
 import 'package:echo_screen/ha.dart';
 import 'package:echo_screen/home/layout.dart';
 import 'package:echo_screen/home/layout_sync.dart';
@@ -16,6 +17,7 @@ class FakeHa {
   final sets = <Map<String, dynamic>>[];
   int? subId;
   int refuse = 0;                               // registrations refused first: the integration not loaded yet
+  bool oldIntegration = false;                  // one of before "replaces": a message with it refused whole
   FakeHa(this.slot);
 
   Future<String> start() async {
@@ -32,11 +34,13 @@ class FakeHa {
           case 'echo_wall/register' when refuse > 0:
             refuse--;
             s.add(jsonEncode({'id': id, 'type': 'result', 'success': false, 'error': {'code': 'unknown_command'}}));
+          case 'echo_wall/register' when oldIntegration && m.containsKey('replaces'):
+            s.add(jsonEncode({'id': id, 'type': 'result', 'success': false, 'error': {'code': 'invalid_format', 'message': "extra keys not allowed @ data['replaces']"}}));
           case 'echo_wall/register':
             registered.add(m);
             s.add(jsonEncode({'id': id, 'type': 'result', 'success': true, 'result': {'device': m['device'], 'name': m['name']}}));
           case 'echo_wall/subscribe':
-            expect(m['device'], 'dev-under-test');
+            expect(m['device'], registered.isEmpty ? 'dev-under-test' : registered.last['device']);
             expect(registered, isNotEmpty);                  // registered first: the device is bound to this login
             subId = id as int;
             s.add(jsonEncode({'id': id, 'type': 'result', 'success': true}));
@@ -113,6 +117,41 @@ void main() {
     await until(() => lay.wallpaper == Wallpaper.amber);
     expect(lay.wallpaper, Wallpaper.amber);
     await fake.server.close(force: true);
+  });
+
+  test('a new id that replaces the old one (a reinstall): told once, then kept', () async {
+    final fake = FakeHa({'wallpaper': 'light'});
+    final ha = Ha(), lay = Layout();
+    var kept = 0;
+    LayoutSync(ha, lay, device: 'dev-under-test', replaces: 'old-random-id1', onRegistered: () => kept++,
+        info: () => {'name': 'Test tablet', 'model': 'X', 'version': '1'});
+    ha.configure(await fake.start(), 'tok');
+    await until(() => lay.wallpaper == Wallpaper.light && kept > 0);
+    expect(fake.registered.single['replaces'], 'old-random-id1');
+    expect(kept, 1);
+    await fake.server.close(force: true);
+  });
+
+  test('an integration of before "replaces": the old id goes on, the move left for its update', () async {
+    final fake = FakeHa({'wallpaper': 'light'})..oldIntegration = true;
+    final ha = Ha(), lay = Layout();
+    var kept = 0;
+    LayoutSync(ha, lay, device: 'dev-under-test', replaces: 'old-random-id1', onRegistered: () => kept++,
+        info: () => {'name': 'Test tablet', 'model': 'X', 'version': '1'});
+    ha.configure(await fake.start(), 'tok');
+    await until(() => lay.wallpaper == Wallpaper.light);
+    expect(fake.registered.single.containsKey('replaces'), isFalse);
+    expect(fake.registered.single['device'], 'old-random-id1');
+    expect(kept, 0);                             // not the new id in the file yet: the move asked again next start
+    await fake.server.close(force: true);
+  });
+
+  test('the stable id: an Echo by its node, else Android\'s id, else none', () {
+    expect(Device.stableId(node: 'echo-show-5-3fce9a', androidId: 'abcdef0123456789'), 'echo-echo-show-5-3fce9a');
+    expect(Device.stableId(androidId: 'abcdef0123456789'), 'android-abcdef0123456789');
+    expect(Device.stableId(androidId: '9774d56d682e549c'), isNull);      // the emulator's, the same everywhere
+    expect(Device.stableId(androidId: 'abc'), isNull);
+    expect(Device.stableId(), isNull);
   });
 
   test('without Echo Local: the file alone, nothing breaks', () async {

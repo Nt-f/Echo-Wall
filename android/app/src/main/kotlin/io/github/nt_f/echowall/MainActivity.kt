@@ -104,8 +104,11 @@ class MainActivity : FlutterActivity() {
                 result.success(true); return@setMethodCallHandler
             }
             if (call.method == "device") {              // what the Echo-Wall integration lists the device as
+                // android_id: Android's id for this app (Android 8 on: per signing key and user; 7: the device's),
+                // the same after a reinstall, unlike a file of the app's: lib/device.dart
+                val aid = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: ""
                 result.success(mapOf("manufacturer" to android.os.Build.MANUFACTURER, "model" to android.os.Build.MODEL,
-                    "product" to android.os.Build.PRODUCT)); return@setMethodCallHandler
+                    "product" to android.os.Build.PRODUCT, "android_id" to aid)); return@setMethodCallHandler
             }
             if (call.method == "hasInputMethod") {      // an Echo: none; elsewhere the device's own keyboard types
                 // hassmic's shell's keyboard counts: it types into this app's pages too
