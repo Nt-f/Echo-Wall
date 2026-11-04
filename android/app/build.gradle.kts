@@ -30,11 +30,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // Releases are signed with Echo-Wall's own key, the same for every build, so a new version installs over the old
+    // one (Android refuses an update signed with another key).  CI and a release build on the maintainer's PC give it
+    // by ECHO_WALL_KEYSTORE (+ _PASSWORD, _ALIAS); anyone else's build falls back to the debug key, which installs fine
+    // but cannot update a released Echo-Wall in place.
+    val ks = System.getenv("ECHO_WALL_KEYSTORE")?.takeIf { it.isNotEmpty() && file(it).exists() }
+    signingConfigs {
+        if (ks != null) create("release") {
+            storeFile = file(ks)
+            storePassword = System.getenv("ECHO_WALL_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ECHO_WALL_KEY_ALIAS") ?: "echowall"
+            keyPassword = System.getenv("ECHO_WALL_KEYSTORE_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (ks != null) "release" else "debug")
         }
     }
 }

@@ -22,7 +22,23 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      # signed with Echo-Wall's release key (repository secrets), where the run has them (not a fork's pull request)
+      - name: Release key
+        env:
+          KEYSTORE_B64: ${{ secrets.ECHO_WALL_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ECHO_WALL_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
       - run: flutter build apk --release --target-platform android-arm
+        env:
+          ECHO_WALL_KEYSTORE_PASSWORD: ${{ secrets.ECHO_WALL_KEYSTORE_PASSWORD }}
+      - name: Signed with the release key on main and tags
+        if: github.event_name == 'push'
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -q "CN=Echo-Wall" || { echo "::error::not signed with the release key"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: Echo-Wall

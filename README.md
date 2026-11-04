@@ -26,16 +26,28 @@ Every feature in detail: [docs/guide.md](docs/guide.md). How the app, the integr
 
 ## Install
 
-1. **The integration** (HACS › Integrations › ⋮ › Custom repositories › `https://github.com/Nt-f/Echo-Wall`,
-   category Integration; install, restart, then Settings › Devices & services › Add integration › Echo-Wall). An
-   "Echo-Wall" panel appears in the sidebar.
-2. **The app**: a release's APK, or build it (below).
-   - **Echo Show with echo-dot-assist**: install it from the Echo's settings page (Screen › Add an app) or Echo
-     Local's Apps tab, then make it the home app there (or Echo Local › Screen › Home app). The Echo hands it Home
-     Assistant's address and a login of its own.
-   - **Tablet**: install it, open it, give Home Assistant's address and log in (a user of its own, not an
-     administrator, is best). Make it the tablet's home app if it is to be the screen.
-3. The device shows up in the Echo-Wall panel by itself. Each login sees only its own devices; the panel all of them.
+### On an Echo Show (with [echo-dot-assist](https://github.com/Gamer92000/echo-dot-assist))
+
+1. **The app.** Download `Echo-Wall.apk` from the [latest release](https://github.com/Nt-f/Echo-Wall/releases/latest).
+   In Home Assistant: **Echo Local** (sidebar) › your Echo › **Apps** › *From this computer* › pick the APK › **Install**.
+   (Or the Echo's settings page: **Screen** › **Add an app**.)
+2. **Make it the home app.** Echo Local › your Echo › **Screen**: **App** = Echo-Wall, switch on **Connect it to Home
+   Assistant**, **Save**. The Echo opens Echo-Wall and hands it Home Assistant's address and a login of its own.
+3. **The integration** (for arranging its Home): HACS › ⋮ › **Custom repositories** › `https://github.com/Nt-f/Echo-Wall`,
+   type **Integration** › install › restart Home Assistant › Settings › Devices & services › **Add integration** ›
+   Echo-Wall. Echo Local's **Home** tab then arranges the Echo's Home.
+
+### On a tablet
+
+1. Install `Echo-Wall.apk` from the [latest release](https://github.com/Nt-f/Echo-Wall/releases/latest) (allow installs
+   from your browser or file manager).
+2. Open it, give Home Assistant's address and log in (a user of its own, not an administrator, is best). Make it the
+   tablet's home app if it is to be the screen.
+3. The integration as in step 3 above: the tablet shows up in the Echo-Wall panel by itself.
+
+Updates: a newer release's APK installs over the old one the same way; nothing is lost (the layout lives in Home
+Assistant). Echo-Wall built by yourself (below) is signed with your own key and cannot update a released one in place:
+uninstall it first.
 
 ## Build
 
