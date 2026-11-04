@@ -489,7 +489,7 @@ class EchoWallPanel extends HTMLElement {
     main.textContent = '';
     if (!this.devInfo()) {
       main.append(h('div', { class: 'empty' }, this._embed
-        ? 'Echo-Wall has not logged in from this Echo yet. Make it the Echo’s home app and give it Home Assistant (the Screen tab): once its app has started, its Home is arranged here.'
+        ? 'Echo-Wall has not signed in from this Echo yet. It needs Echo-Wall 1.1 or newer as the Echo’s home app, connected to Home Assistant (the Screen tab); its Home shows here a few seconds after the app starts. Signed in as another Home Assistant user? Then it is in Echo-Wall’s own panel, /echo-wall.'
         : 'Pick a device on the left.'));
       return;
     }

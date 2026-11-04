@@ -34,6 +34,19 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- the Echo's keyboard, for every app on it (Fire OS's went with Amazon's apps): a light process of its own,
+             apart from Flutter.  Root's main.sh enables and picks it while Echo-Wall is the home app -->
+        <service
+            android:name=".EchoKeyboard"
+            android:process=":kb"
+            android:label="Echo-Wall keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/method" />
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
