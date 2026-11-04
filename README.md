@@ -9,10 +9,6 @@ voice assistant, alarms and timers drawn on its glass; on a tablet it logs in to
 <img src="docs/screenshots/show5-home.png" width="49%"> <img src="docs/screenshots/show5-controls.png" width="49%">
 <img src="docs/screenshots/show5-lock.png" width="49%"> <img src="docs/screenshots/show5-edit.png" width="49%">
 
-> [!CAUTION]
-> **Vibecoded, unaudited, your risk.** Written by an AI (Claude) in conversation with the author, and run for real on
-> one Echo Show 5 so far; every other screen below is an emulator's. No warranty, no support.
-
 ## What you get
 
 |                          |                                                                                        |
