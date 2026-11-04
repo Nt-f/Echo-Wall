@@ -57,6 +57,9 @@ header .menu { display: none; }
 .iconbtn:hover { background: rgba(127,127,127,.15); }
 .wrap { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100% - var(--header-height, 56px)); }
 :host([narrow]) .wrap { grid-template-columns: 1fr; }
+:host([embedded]) { height: auto; background: none; }
+:host([embedded]) header, :host([embedded]) nav { display: none; }
+:host([embedded]) .wrap { grid-template-columns: 1fr; min-height: 0; }
 nav { border-right: 1px solid var(--line); padding: 12px 8px; background: var(--card-background-color); }
 :host([narrow]) nav { border-right: 0; border-bottom: 1px solid var(--line); display: flex; overflow-x: auto; gap: 6px; padding: 8px; }
 nav .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 10px 8px; }
@@ -230,10 +233,23 @@ class EchoWallPanel extends HTMLElement {
   set hass(h) { const first = !this._hass; this._hass = h; if (first) this.load(); }
   get hass() { return this._hass; }
   set narrow(n) { this.toggleAttribute('narrow', !!n); }
+  // Echo Local's "Home" tab hosts this element for one Echo: {user} = the Home Assistant user Echo Local made for that
+  // Echo, which Echo-Wall's app logs in as (echo_wall/register binds the device to it).  No header, no device list.
+  set embed(v) {
+    const was = this._embed && this._embed.user;
+    this._embed = v || null; this.toggleAttribute('embedded', !!v);
+    if (this._hass && was !== (v && v.user)) { this.dev = null; this.load(); }
+  }
+  // the devices shown: in Echo Local's tab only the Echo's own (its user's)
+  shown() { return this._embed ? this.state.devices.filter((e) => this._embed.user && e.user === this._embed.user) : this.state.devices; }
 
   connectedCallback() { addEventListener('message', this.onMessage); this.render(); }
   disconnectedCallback() {
     removeEventListener('message', this.onMessage);
+    if (!this._embed) this.release();   // in Echo Local's tab: taken out on every tab switch, its drafts kept
+  }
+  // the layouts followed live let go, the drafts with them (Echo Local calls it when its own panel goes)
+  release() {
     for (const d of this.drafts.values()) if (d.sub) d.sub.then((u) => u()).catch(() => {});
     this.drafts.clear();
   }
@@ -249,7 +265,7 @@ class EchoWallPanel extends HTMLElement {
     try {
       const r = await this.ws({ type: 'echo_wall/list' });
       this.state = { devices: r.devices, desc: { name: r.name, about: r.about, fields: r.fields, preview: r.preview }, limits: r.limits, loaded: true, error: '' };
-      if (!this.dev || !this.devInfo()) this.dev = (r.devices[0] || {}).device || null;
+      if (!this.dev || !this.shown().some((e) => e.device === this.dev)) this.dev = (this.shown()[0] || {}).device || null;
     } catch (e) {
       this.state = { ...this.state, loaded: true, error: (e && e.message) || String(e) };
     }
@@ -471,7 +487,12 @@ class EchoWallPanel extends HTMLElement {
   renderMain() {
     const main = this.shadowRoot.querySelector('main'); if (!main) return;
     main.textContent = '';
-    if (!this.devInfo()) { main.append(h('div', { class: 'empty' }, 'Pick a device on the left.')); return; }
+    if (!this.devInfo()) {
+      main.append(h('div', { class: 'empty' }, this._embed
+        ? 'Echo-Wall has not logged in from this Echo yet. Make it the Echo’s home app and give it Home Assistant (the Screen tab): once its app has started, its Home is arranged here.'
+        : 'Pick a device on the left.'));
+      return;
+    }
     const c = this.cur();
     if (!c || c.draft == null) {         // being read (a reset: until the subscription brings the empty one)
       if (!c) this.open(this.dev).then(() => this.render());

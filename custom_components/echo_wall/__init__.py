@@ -26,9 +26,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                                      StaticPathConfig(PREVIEW_URL, str(fe / "preview"), False)])
         hass.data[_STATIC] = True
     version = entry.version
+    # beside Echo Local (hassmic's integration) the panel lives in its "Home" tab, per Echo: no sidebar entry of its
+    # own then (the panel is still registered: Echo Local loads its element from it; /echo-wall still opens it)
+    local = "echo_local" in hass.config.components
     await panel_custom.async_register_panel(hass, webcomponent_name="echo-wall-panel", frontend_url_path=PANEL_PATH,
-                                            module_url=f"{PANEL_URL}?v={_mtime()}", sidebar_title="Echo-Wall",
-                                            sidebar_icon="mdi:tablet-dashboard", require_admin=True, config={"v": version})
+                                            module_url=f"{PANEL_URL}?v={_mtime()}", sidebar_title=None if local else "Echo-Wall",
+                                            sidebar_icon=None if local else "mdi:tablet-dashboard", require_admin=True, config={"v": version})
     return True
 
 

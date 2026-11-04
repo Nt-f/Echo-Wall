@@ -215,7 +215,7 @@ def ws_list(hass: HomeAssistant, connection, msg: dict) -> None:
         lay = d["layouts"].get(k) or {}
         out.append({"device": k, "name": dev.get("name", k), "model": dev.get("model", ""), "version": dev.get("version", ""),
                     "seen": dev.get("seen", 0), "screen": dev.get("screen"), "screens": dev.get("screens", []),
-                    "user_name": dev.get("user_name", ""), "updated": lay.get("updated", 0), "by": lay.get("by", "")})
+                    "user": dev.get("user", ""), "user_name": dev.get("user_name", ""), "updated": lay.get("updated", 0), "by": lay.get("by", "")})
     out.sort(key=lambda x: x["name"].lower())
     connection.send_result(msg["id"], {"devices": out, "name": NAME, "about": ABOUT, "fields": FIELDS, "preview": f"{PREVIEW_URL}/index.html",
                                        "limits": {"layout": MAX_LAYOUT, "ids": MAX_IDS}})
